@@ -1,0 +1,69 @@
+import numpy as np
+import os
+from network.params import parameters
+from kinematics.planar_arms import PlanarArms
+
+
+def generate_random_coordinate(theta_bounds_lower: float = parameters['theta_limit_low'],
+                               theta_bounds_upper: float = parameters['theta_limit_high'],
+                               x_bounds: tuple[float, float] = parameters['x_reaching_space_limits'],
+                               y_bounds: tuple[float, float] = parameters['y_reaching_space_limits'],
+                               clip_borders_theta: float = 10.,
+                               clip_borders_xy: float = 10.,
+                               init_thetas: np.ndarray | None = None,
+                               normalize_xy: bool = False,
+                               return_thetas_radians: bool = False) -> tuple[np.ndarray, np.ndarray]:
+
+    valid = False
+    while not valid:
+        random_thetas = np.random.uniform(low=theta_bounds_lower + clip_borders_theta,
+                                          high=theta_bounds_upper - clip_borders_theta,
+                                          size=2)
+
+        random_xy = PlanarArms.forward_kinematics(arm=parameters['moving_arm'],
+                                                  thetas=random_thetas,
+                                                  radians=False)[:, -1]
+
+        if (x_bounds[0] + clip_borders_xy < random_xy[0] < x_bounds[1] - clip_borders_xy
+                and y_bounds[0] + clip_borders_xy < random_xy[1] < y_bounds[1] - clip_borders_xy):
+            # check if thetas are far from each other
+            if init_thetas is not None:
+                # init thetas must be in degrees
+                init_xy = PlanarArms.forward_kinematics(arm=parameters['moving_arm'],
+                                                        thetas=init_thetas,
+                                                        radians=False)[:, -1]
+                if np.linalg.norm(init_xy - random_xy) > 50.0:
+                    valid = True
+            else:
+                valid = True
+
+    if return_thetas_radians:
+        random_thetas = np.radians(random_thetas)
+
+    if not normalize_xy:
+        return random_thetas, random_xy
+    else:
+        # Normalize random_xy
+        normalized_x = (random_xy[0] - x_bounds[0]) / (x_bounds[1] - x_bounds[0])
+        normalized_y = (random_xy[1] - y_bounds[0]) / (y_bounds[1] - y_bounds[0])
+        normalized_xy = np.array([normalized_x, normalized_y])
+
+        return random_thetas, normalized_xy
+
+
+def safe_save(save_name: str, array: np.ndarray) -> None:
+    """
+    If a folder is specified and does not yet exist, it will be created automatically.
+    :param save_name: full path + data name
+    :param array: array to save
+    :return:
+    """
+    # create folder if not exists
+    folder, data_name = os.path.split(save_name)
+    if folder and not os.path.exists(folder):
+        os.makedirs(folder)
+
+    if data_name[-3:] == 'npy':
+        np.save(save_name, array)
+    else:
+        np.save(save_name + '.npy', array)
