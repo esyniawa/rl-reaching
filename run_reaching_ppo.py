@@ -19,7 +19,8 @@ from reward_functions import gaussian_reward, sigmoid_reward, logarithmic_reward
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
-class ReplayBuffer:
+# TODO: implement external critic,
+class ExperienceBuffer:
     def __init__(self, capacity: int):
         self.buffer = deque(maxlen=capacity)
 
@@ -29,37 +30,57 @@ class ReplayBuffer:
     def sample(self, batch_size: int) -> List:
         return random.sample(self.buffer, batch_size)
 
+    def clear(self):
+        self.buffer.clear()
+
     def __len__(self):
         return len(self.buffer)
 
 
-class PPONetwork(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_layer_size: Tuple[int, int] = (128, 128)):
-        super(PPONetwork, self).__init__()
+class ActorNetwork(nn.Module):
+    def __init__(self, input_dim, output_dim, hidden_layer_size=128):
+        super(ActorNetwork, self).__init__()
         self.shared = nn.Sequential(
-            nn.Linear(input_dim, hidden_layer_size[0]),
+            nn.Linear(input_dim, hidden_layer_size),
             nn.ReLU(),
-            nn.Linear(hidden_layer_size[0], 64),
+            nn.Linear(hidden_layer_size, 64),
             nn.ReLU()
         )
         self.actor_mean = nn.Linear(64, output_dim)
         self.actor_std = nn.Linear(64, output_dim)
-        # make critic independent
-        self.critic = nn.Linear(64, 1)
 
     def forward(self, x):
         shared_output = self.shared(x)
         mean = self.actor_mean(shared_output)
-        std = nn.functional.softplus(
-            self.actor_std(shared_output)) + 1e-6  # Softplus activation, adding a small value for numerical stability
-        value = self.critic(shared_output)
-        return mean, std, value
+        std = nn.functional.softplus(self.actor_std(shared_output)) + 1e-6
+        return mean, std
+
+
+class CriticNetwork(nn.Module):
+    def __init__(self, input_dim, hidden_layer_size=128):
+        super(CriticNetwork, self).__init__()
+        self.critic = nn.Sequential(
+            nn.Linear(input_dim, hidden_layer_size),
+            nn.ReLU(),
+            nn.Linear(hidden_layer_size, 1)
+        )
+
+    def forward(self, x):
+        return self.critic(x)
 
 
 class PPOAgent:
-    def __init__(self, input_dim, output_dim, lr=3e-4, gamma=0.99, epsilon=0.2, epochs=10, batch_size=64):
-        self.network = PPONetwork(input_dim, output_dim)
-        self.optimizer = optim.Adam(self.network.parameters(), lr=lr)
+    def __init__(self,
+                 input_dim,
+                 output_dim,
+                 actor_lr=3e-4, critic_lr=3e-4,
+                 gamma=0.99, epsilon=0.2,
+                 epochs=10, batch_size=128):
+
+        self.actor = ActorNetwork(input_dim, output_dim)
+        self.critic = CriticNetwork(input_dim)
+        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=actor_lr)
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=critic_lr)
         self.gamma = gamma
         self.epsilon = epsilon
         self.epochs = epochs
@@ -68,13 +89,13 @@ class PPOAgent:
     def get_action(self, state):
         with torch.no_grad():
             state = torch.FloatTensor(state).unsqueeze(0)  # Add batch dimension
-            mean, std, _ = self.network(state)
+            mean, std = self.actor(state)
             dist = Normal(mean, std)
             action = dist.sample()
             log_prob = dist.log_prob(action).sum(dim=-1)
         return action.squeeze(0).numpy(), log_prob.squeeze(0).numpy()
 
-    def update(self, replay_buffer: ReplayBuffer):
+    def update(self, replay_buffer: ExperienceBuffer):
         if len(replay_buffer) < self.batch_size:
             return
 
@@ -91,15 +112,16 @@ class PPOAgent:
 
             # Compute returns and advantages
             with torch.no_grad():
-                _, _, next_values = self.network(next_states)
+                next_values = self.critic(next_states)
                 returns = rewards + self.gamma * next_values.squeeze() * (1 - dones)
-                _, _, values = self.network(states)
+                values = self.critic(states)
                 advantages = returns - values.squeeze()
 
             # Normalize advantages
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-            mean, std, values = self.network(states)
+            # Actor loss
+            mean, std = self.actor(states)
             dist = Normal(mean, std)
             new_log_probs = dist.log_prob(actions).sum(dim=-1, keepdim=True)
             ratio = torch.exp(new_log_probs - old_log_probs.unsqueeze(1))
@@ -108,16 +130,23 @@ class PPOAgent:
             surr2 = torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon) * advantages.unsqueeze(1)
 
             actor_loss = -torch.min(surr1, surr2).mean()
-            critic_loss = nn.MSELoss()(values, returns.unsqueeze(1))
-            entropy = dist.entropy().mean()
 
-            loss = actor_loss + 0.5 * critic_loss - 0.01 * entropy
+            # Critic loss
+            critic_loss = nn.MSELoss()(self.critic(states), returns.unsqueeze(1))
 
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
+            # Update actor
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            self.actor_optimizer.step()
 
-    # Save and load methods remain the same
+            # Update critic
+            self.critic_optimizer.zero_grad()
+            critic_loss.backward()
+            self.critic_optimizer.step()
+
+        # clear buffer after each update because we are on-policy
+        replay_buffer.clear()
+
     def save(self, path: str):
         if path[-1] != '/':
             path += '/'
@@ -125,17 +154,18 @@ class PPOAgent:
         if not os.path.exists(path):
             os.makedirs(path)
 
-        torch.save(self.network.state_dict(), path + 'network.pt')
+        torch.save(self.actor.state_dict(), path + 'actor.pt')
+        torch.save(self.critic.state_dict(), path + 'critic.pt')
 
     def load(self, path: str):
         if path[-1] != '/':
             path += '/'
 
-        self.network.load_state_dict(torch.load(path + 'network.pt'))
+        self.actor.load_state_dict(torch.load(path + 'actor.pt'))
+        self.critic.load_state_dict(torch.load(path + 'critic.pt'))
 
 
 # Environment wrapper
-# TODO: implement init thetas in environment
 class ReachingEnvironment:
     def __init__(self, init_thetas: np.ndarray = np.radians((90, 90)), radians: bool = True):
 
@@ -205,12 +235,12 @@ def collect_experience(args):
 def train_ppo(Agent: PPOAgent,
               ReachEnv: ReachingEnvironment,
               num_reaching_trials: int,
-              num_workers: int = 4,
-              buffer_capacity: int = 100_000,
+              num_workers: int = 10,
+              buffer_capacity: int = 2048,
               steps_per_worker: int = 200,
-              update_interval: int = 1000) -> PPOAgent:
+              num_updates: int = 1) -> PPOAgent:
 
-    replay_buffer = ReplayBuffer(buffer_capacity)
+    replay_buffer = ExperienceBuffer(buffer_capacity)
     pool = Pool(num_workers)
 
     for trial in range(num_reaching_trials):
@@ -222,12 +252,10 @@ def train_ppo(Agent: PPOAgent,
         worker_experiences = pool.map(collect_experience, worker_args)
 
         # Add experiences to the replay buffer
-        for experiences in worker_experiences:
-            for exp in experiences:
-                replay_buffer.push(*exp)
-
-        # TODO: Update the agent
-        if (trial + 1) % update_interval == 0:
+        for _ in range(num_updates):
+            for experiences in worker_experiences:
+                for exp in experiences:
+                    replay_buffer.push(*exp)
             Agent.update(replay_buffer)
 
     return Agent
@@ -291,7 +319,7 @@ if __name__ == "__main__":
             os.makedirs(path)
 
     # parameters
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000,)
     test_trials = 100
 
     # initialize agent
@@ -317,12 +345,15 @@ if __name__ == "__main__":
             os.makedirs(save_path_testing + subfolder)
         np.savez(save_path_testing + subfolder + 'results.npz', **results_dict)
 
-        if sim_args.do_plot:
-            errors = []
-            for target, exec in zip(results_dict['targets_thetas'], results_dict['executed_thetas']):
-                error = PlanarArms.forward_kinematics(arm='right', thetas=target)[:, -1] - PlanarArms.forward_kinematics(arm='right', thetas=exec)[:, -1]
-                errors.append(error)
+        errors = []
+        for target, exec in zip(results_dict['targets_thetas'], results_dict['executed_thetas']):
+            error = np.linalg.norm(PlanarArms.forward_kinematics(arm='right', thetas=target)[:, -1] -
+                                   PlanarArms.forward_kinematics(arm='right', thetas=exec)[:, -1])
+            errors.append(error)
 
+        np.save(save_path_testing + subfolder + 'error.npy', np.array(errors))
+
+        if sim_args.do_plot:
             fig, axs = plt.subplots(nrows=2)
             axs[0].plot(np.array(errors))
             axs[0].set_title('Error')
