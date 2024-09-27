@@ -19,7 +19,6 @@ from reward_functions import gaussian_reward, sigmoid_reward, logarithmic_reward
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
-# TODO: implement external critic,
 class ExperienceBuffer:
     def __init__(self, capacity: int):
         self.buffer = deque(maxlen=capacity)
@@ -167,32 +166,44 @@ class PPOAgent:
 
 # Environment wrapper
 class ReachingEnvironment:
-    def __init__(self, init_thetas: np.ndarray = np.radians((90, 90)), radians: bool = True):
+    def __init__(self,
+                 target_thetas: np.ndarray,
+                 init_thetas: np.ndarray,
+                 arm: str = 'right'):
+        """
 
-        if not radians:
-            self.init_thetas = np.radians(init_thetas)
-        else:
-            self.init_thetas = init_thetas
-
+        :param target_thetas: target angles in radians
+        :param init_thetas: initial angles in radians
+        :param arm: left or right arm
+        """
+        self.init_thetas = init_thetas
         self.current_thetas = self.init_thetas.copy()
-        self.target_thetas, self.target_pos = None, None
-        self.max_distance = PlanarArms.upper_arm_length + PlanarArms.forearm_length
+        self.target_thetas, self.target_pos = target_thetas, PlanarArms.forward_kinematics(arm=arm, thetas=target_thetas)[:, -1]
 
-    def random_target(self):
-        self.init_thetas = self.current_thetas.copy()
-        # This function takes angles in degrees due to the other model!!!
-        self.target_thetas, self.target_pos = generate_random_coordinate(init_thetas=self.init_thetas,
-                                                                         normalize_xy=True,
-                                                                         return_thetas_radians=True)
+    @staticmethod
+    def random_target(init_thetas: np.ndarray):
+        target_thetas, target_pos = generate_random_coordinate(init_thetas=init_thetas,
+                                                               normalize_xy=True,
+                                                               return_thetas_radians=True)
+
+        return target_thetas, target_pos
 
     def reset(self):
         return np.concatenate([self.init_thetas, self.target_pos])
 
-    def set_thetas(self, thetas: np.ndarray):
-        self.init_thetas = thetas
-        self.current_thetas = thetas
+    def set_parameters(self,
+                       target_thetas: np.ndarray,
+                       target_pos: np.ndarray,
+                       init_thetas: np.ndarray):
 
-    def step(self, action: np.ndarray, max_angle_change: float = np.radians(10), clip_thetas: bool = True):
+        self.init_thetas, self.current_thetas = init_thetas, init_thetas
+        self.target_thetas, self.target_pos = target_thetas, target_pos
+
+    def step(self,
+             action: np.ndarray, abort_criteria: float = 5,  # in [mm]m
+             max_angle_change: float = np.radians(10),
+             clip_thetas: bool = True):
+
         delta_thetas = np.clip(action, -max_angle_change, max_angle_change)  # prevent very large angle changes
 
         # clip angles to joint constraints
@@ -205,18 +216,20 @@ class ReachingEnvironment:
 
         # Calculate reward
         distance = np.linalg.norm(new_pos - self.target_pos)
-        reward = 1.0 - (distance / self.max_distance)
+        # TODO: Try different reward functions
+        reward = gaussian_reward(error=distance, sigma=25.)
         # reward smoother actions
         reward += 0.1 * (1.0 - np.sum(np.abs(action)) / (2 * max_angle_change))
-        done = distance < 10  # 10mm threshold
+        done = distance < abort_criteria
 
         self.current_thetas = new_thetas
-        return np.concatenate([new_thetas, self.target_pos]), reward, done
+        return np.concatenate([self.current_thetas, self.target_pos]), reward, done
 
 
 def collect_experience(args):
-    env, agent, num_steps = args
+    agent, num_steps, init_thetas, target_pos = args
 
+    env = ReachingEnvironment(target_thetas=target_pos, init_thetas=init_thetas)
     state = env.reset()
     experiences = []
 
@@ -233,22 +246,23 @@ def collect_experience(args):
 
 # Training loop
 def train_ppo(Agent: PPOAgent,
-              ReachEnv: ReachingEnvironment,
               num_reaching_trials: int,
               num_workers: int = 10,
               buffer_capacity: int = 2048,
               steps_per_worker: int = 200,
-              num_updates: int = 1) -> PPOAgent:
+              num_updates: int = 1,
+              init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
     replay_buffer = ExperienceBuffer(buffer_capacity)
     pool = Pool(num_workers)
 
     for trial in range(num_reaching_trials):
         # Initialize target for the environment
-        ReachEnv.random_target()
+
+        target_thetas, _ = ReachingEnvironment.random_target(init_thetas=init_thetas)
 
         # Collect experiences using multiple workers
-        worker_args = [(ReachEnv, Agent, steps_per_worker) for _ in range(num_workers)]
+        worker_args = [(Agent, steps_per_worker, init_thetas, target_thetas) for _ in range(num_workers)]
         worker_experiences = pool.map(collect_experience, worker_args)
 
         # Add experiences to the replay buffer
@@ -258,17 +272,23 @@ def train_ppo(Agent: PPOAgent,
                     replay_buffer.push(*exp)
             Agent.update(replay_buffer)
 
+        # New initial angles are the current target angles
+        init_thetas = target_thetas
+
+    del pool
+
     return Agent
 
 
 def test_ppo(Agent: PPOAgent,
-             ReachEnv: ReachingEnvironment,
              num_reaching_trials: int,
              init_thetas: np.ndarray = np.radians((90, 90)),
              max_steps: int = 200,  # beware the actions are clipped
              ) -> dict:
 
-    ReachEnv.set_thetas(init_thetas)
+    target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
+    ReachEnv = ReachingEnvironment(init_thetas=init_thetas, target_thetas=target_thetas)
+
     test_results = {
         'targets_thetas': [],
         'executed_thetas': [],
@@ -277,7 +297,6 @@ def test_ppo(Agent: PPOAgent,
 
     for trial in range(num_reaching_trials):
         # initialize target for the environment
-        ReachEnv.random_target()
         state = ReachEnv.reset()
         episode_reward = 0
 
@@ -294,6 +313,10 @@ def test_ppo(Agent: PPOAgent,
         test_results['targets_thetas'].append(ReachEnv.target_thetas)
         test_results['executed_thetas'].append(ReachEnv.current_thetas)
         test_results['total_reward'].append(episode_reward)
+
+        # set new targets
+        new_target_thetas, new_target_pos = ReachingEnvironment.random_target(init_thetas=target_pos)
+        ReachEnv.set_parameters(target_thetas=new_target_thetas, target_pos=new_target_pos, init_thetas=target_pos)
 
     return test_results
 
@@ -325,14 +348,13 @@ if __name__ == "__main__":
     # initialize agent
     state_dim = 4  # Current joint angles (2) + target position (2)
     action_dim = 2  # Changes in joint angles
-    env = ReachingEnvironment()
     agent = PPOAgent(input_dim=state_dim, output_dim=action_dim)
 
     # training loop TODO: make ajustments
     for trials in training_trials:
         print(f'Sim {sim_args.id}: Training for {trials}...')
         subfolder = f'model_{trials}/'
-        agent = train_ppo(agent, env,
+        agent = train_ppo(agent,
                           num_reaching_trials=trials,
                           num_workers=sim_args.num_workers)
 
@@ -340,7 +362,7 @@ if __name__ == "__main__":
             agent.save(save_path_training + subfolder)
 
         print(f'Sim {sim_args.id}: Testing...')
-        results_dict = test_ppo(agent, env, num_reaching_trials=test_trials, init_thetas=np.radians((90, 90)))
+        results_dict = test_ppo(agent, num_reaching_trials=test_trials, init_thetas=np.radians((90, 90)))
         if not os.path.exists(save_path_testing + subfolder):
             os.makedirs(save_path_testing + subfolder)
         np.savez(save_path_testing + subfolder + 'results.npz', **results_dict)
