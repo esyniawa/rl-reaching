@@ -258,7 +258,6 @@ def train_ppo(Agent: PPOAgent,
 
     for trial in range(num_reaching_trials):
         # Initialize target for the environment
-
         target_thetas, _ = ReachingEnvironment.random_target(init_thetas=init_thetas)
 
         # Collect experiences using multiple workers
@@ -326,7 +325,7 @@ if __name__ == "__main__":
     sim_args_parser.add_argument('--id', type=int, default=0, help='Simulation ID')
     sim_args_parser.add_argument('--save', type=bool, default=True)
     sim_args_parser.add_argument('--do_plot', type=bool, default=True)
-    sim_args_parser.add_argument('--num_workers', type=int, default=8)
+    sim_args_parser.add_argument('--num_workers', type=int, default=10)
     sim_args_parser.add_argument('--num_testing_trials', type=int, default=100)
     sim_args = sim_args_parser.parse_args()
 
@@ -343,7 +342,7 @@ if __name__ == "__main__":
 
     # parameters
     training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000,)
-    test_trials = 100
+    test_trials = sim_args.num_testing_trials
 
     # initialize agent
     state_dim = 4  # Current joint angles (2) + target position (2)

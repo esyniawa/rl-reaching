@@ -57,8 +57,8 @@ parameters['A_vl_m1'] = 0.75
 
 parameters['dim_bg'] = parameters['dim_motor']
 
-parameters['strength_efference_copy'] = 0.3
-parameters['strength_m1_copy'] = 0.3
+parameters['strength_cm'] = 0.3
+parameters['strength_snr'] = 0.6
 
 parameters['depth_str'] = parameters['dim_motor'][0] * 2
 parameters['subsets_str'] = {

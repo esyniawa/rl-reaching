@@ -95,6 +95,10 @@ def w_one_to_ones(preDim: int, postDim: tuple | list, postIndex: int = -1, weigh
     return w.reshape((n*post_k, preDim))
 
 
+def w_ones_to_one(preDim: tuple, postDim: int, postIndex: int = -1, weight: float = 1.0):
+    pass
+
+
 def w_pooling(preDim: tuple | list, poolingDim: int = -1, weight: float = 1.0):
     """
     Just a summation pooling connection. Implemented because ANNarchys Pooling Function doesn't support summation.
