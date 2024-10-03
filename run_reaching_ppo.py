@@ -12,8 +12,8 @@ from collections import deque
 import random
 
 from kinematics.planar_arms import PlanarArms
-from utils import safe_save, generate_random_coordinate
-from reward_functions import gaussian_reward, sigmoid_reward, logarithmic_reward
+from utils import safe_save, generate_random_coordinate, norm_xy
+from reward_functions_ppo import gaussian_reward, sigmoid_reward, logarithmic_reward
 
 # torch.set_num_threads(4)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -176,28 +176,34 @@ class ReachingEnvironment:
         :param init_thetas: initial angles in radians
         :param arm: left or right arm
         """
+
+        self.arm = arm
         self.init_thetas = init_thetas
-        self.current_thetas = self.init_thetas.copy()
-        self.target_thetas, self.target_pos = target_thetas, PlanarArms.forward_kinematics(arm=arm, thetas=target_thetas)[:, -1]
+        self.current_thetas = init_thetas.copy()
+        self.target_thetas, self.target_pos = target_thetas, PlanarArms.forward_kinematics(arm=self.arm,
+                                                                                           thetas=target_thetas,
+                                                                                           radians=True)[:, -1]
+        self.norm_target_pos = norm_xy(self.target_pos)
 
     @staticmethod
     def random_target(init_thetas: np.ndarray):
         target_thetas, target_pos = generate_random_coordinate(init_thetas=init_thetas,
-                                                               normalize_xy=True,
                                                                return_thetas_radians=True)
 
         return target_thetas, target_pos
 
     def reset(self):
-        return np.concatenate([self.init_thetas, self.target_pos])
+        self.current_thetas = self.init_thetas.copy()
+        return np.concatenate([self.current_thetas, self.norm_target_pos])
 
     def set_parameters(self,
                        target_thetas: np.ndarray,
                        target_pos: np.ndarray,
                        init_thetas: np.ndarray):
 
-        self.init_thetas, self.current_thetas = init_thetas, init_thetas
+        self.init_thetas, self.current_thetas = init_thetas, init_thetas.copy()
         self.target_thetas, self.target_pos = target_thetas, target_pos
+        self.norm_target_pos = norm_xy(target_pos)
 
     def step(self,
              action: np.ndarray, abort_criteria: float = 5,  # in [mm]m
@@ -212,7 +218,7 @@ class ReachingEnvironment:
             new_thetas = PlanarArms.clip_values(new_thetas, radians=True)
 
         # Calculate new position
-        new_pos = PlanarArms.forward_kinematics('right', new_thetas, radians=True, check_limits=False)[:, -1]
+        new_pos = PlanarArms.forward_kinematics(self.arm, new_thetas, radians=True, check_limits=False)[:, -1]
 
         # Calculate reward
         distance = np.linalg.norm(new_pos - self.target_pos)
@@ -223,18 +229,18 @@ class ReachingEnvironment:
         done = distance < abort_criteria
 
         self.current_thetas = new_thetas
-        return np.concatenate([self.current_thetas, self.target_pos]), reward, done
+        return np.concatenate([self.current_thetas, self.norm_target_pos]), reward, done
 
 
 def collect_experience(args):
-    agent, num_steps, init_thetas, target_pos = args
+    Agent, num_steps, init_thetas, target_thetas = args
 
-    env = ReachingEnvironment(target_thetas=target_pos, init_thetas=init_thetas)
+    env = ReachingEnvironment(target_thetas=target_thetas, init_thetas=init_thetas)
     state = env.reset()
     experiences = []
 
     for _ in range(num_steps):
-        action, log_prob = agent.get_action(state)
+        action, log_prob = Agent.get_action(state)
         next_state, reward, done = env.step(action)
         experiences.append((state, action, reward, next_state, done, log_prob))
         state = next_state
@@ -285,7 +291,7 @@ def test_ppo(Agent: PPOAgent,
              max_steps: int = 200,  # beware the actions are clipped
              ) -> dict:
 
-    target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
+    target_thetas, _ = ReachingEnvironment.random_target(init_thetas=init_thetas)
     ReachEnv = ReachingEnvironment(init_thetas=init_thetas, target_thetas=target_thetas)
 
     test_results = {
@@ -314,8 +320,8 @@ def test_ppo(Agent: PPOAgent,
         test_results['total_reward'].append(episode_reward)
 
         # set new targets
-        new_target_thetas, new_target_pos = ReachingEnvironment.random_target(init_thetas=target_pos)
-        ReachEnv.set_parameters(target_thetas=new_target_thetas, target_pos=new_target_pos, init_thetas=target_pos)
+        new_target_thetas, new_target_pos = ReachingEnvironment.random_target(init_thetas=target_thetas)
+        ReachEnv.set_parameters(target_thetas=new_target_thetas, target_pos=new_target_pos, init_thetas=target_thetas)
 
     return test_results
 
