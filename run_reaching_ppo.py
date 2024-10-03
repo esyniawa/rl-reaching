@@ -13,7 +13,7 @@ import random
 
 from kinematics.planar_arms import PlanarArms
 from utils import safe_save, generate_random_coordinate, norm_xy
-from reward_functions_ppo import gaussian_reward, sigmoid_reward, logarithmic_reward
+from reward_functions_ppo import gaussian_reward, linear_reward, sigmoid_reward, logarithmic_reward
 
 # torch.set_num_threads(4)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -85,12 +85,15 @@ class PPOAgent:
         self.epochs = epochs
         self.batch_size = batch_size
 
-    def get_action(self, state):
+    def get_action(self, state, add_exploration_noise: None | float = None):
         with torch.no_grad():
             state = torch.FloatTensor(state).unsqueeze(0)  # Add batch dimension
             mean, std = self.actor(state)
             dist = Normal(mean, std)
             action = dist.sample()
+            if add_exploration_noise is not None:
+                action += torch.randn_like(action) * add_exploration_noise
+
             log_prob = dist.log_prob(action).sum(dim=-1)
         return action.squeeze(0).numpy(), log_prob.squeeze(0).numpy()
 
@@ -233,7 +236,11 @@ class ReachingEnvironment:
 
 
 def collect_experience(args):
-    Agent, num_steps, init_thetas, target_thetas = args
+    Agent, num_steps, init_thetas, target_thetas, seed = args
+
+    # Set the seed for this worker
+    torch.manual_seed(seed)
+    np.random.seed(seed)
 
     env = ReachingEnvironment(target_thetas=target_thetas, init_thetas=init_thetas)
     state = env.reset()
@@ -254,9 +261,9 @@ def collect_experience(args):
 def train_ppo(Agent: PPOAgent,
               num_reaching_trials: int,
               num_workers: int = 10,
-              buffer_capacity: int = 2048,
+              buffer_capacity: int = 2000,
               steps_per_worker: int = 200,
-              num_updates: int = 1,
+              num_updates: int = 2,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
     replay_buffer = ExperienceBuffer(buffer_capacity)
@@ -267,7 +274,7 @@ def train_ppo(Agent: PPOAgent,
         target_thetas, _ = ReachingEnvironment.random_target(init_thetas=init_thetas)
 
         # Collect experiences using multiple workers
-        worker_args = [(Agent, steps_per_worker, init_thetas, target_thetas) for _ in range(num_workers)]
+        worker_args = [(Agent, steps_per_worker, init_thetas, target_thetas, i) for i in range(num_workers)]
         worker_experiences = pool.map(collect_experience, worker_args)
 
         # Add experiences to the replay buffer
