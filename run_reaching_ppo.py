@@ -89,10 +89,12 @@ class PPOAgent:
         with torch.no_grad():
             state = torch.FloatTensor(state).unsqueeze(0)  # Add batch dimension
             mean, std = self.actor(state)
+            # add noise to std to encourage or discourage exploration
+            if add_exploration_noise is not None:
+                std *= torch.abs(torch.randn_like(std) * add_exploration_noise)
+
             dist = Normal(mean, std)
             action = dist.sample()
-            if add_exploration_noise is not None:
-                action += torch.randn_like(action) * add_exploration_noise
 
             log_prob = dist.log_prob(action).sum(dim=-1)
         return action.squeeze(0).numpy(), log_prob.squeeze(0).numpy()
