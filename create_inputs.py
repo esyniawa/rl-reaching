@@ -13,7 +13,6 @@ def make_inputs(current_angles: np.ndarray,
                 end_point: np.ndarray,
                 next_angles: np.ndarray | None = None,
                 degrees: bool = True):
-
     if not degrees:
         current_angles = np.degrees(current_angles)
         if next_angles is not None:
@@ -58,7 +57,6 @@ def trial(input_pm: np.ndarray,
           t_sim: float,
           training: bool = True,
           reset: bool = True):
-
     if not training:
         ann.disable_learning()
     else:
@@ -92,8 +90,7 @@ def trial(input_pm: np.ndarray,
 
 def train_position(current_thetas: np.ndarray,
                    t_reward: float = 400.,
-                   t_wait: float = 50.):
-
+                   t_wait: float = 50.) -> tuple[np.ndarray, np.ndarray, float]:
     new_thetas, new_position = generate_random_coordinate()
 
     # make input
@@ -115,18 +112,17 @@ def train_fixed_position(current_thetas: np.ndarray,
                          goal: np.ndarray,
                          t_reward: float = 400.,
                          t_wait: float = 50.):
-
     base_pm, base_s1, base_m1, new_thetas = make_inputs(current_angles=current_thetas,
                                                         end_point=goal)
 
-    trial(input_pm=base_pm,
-          input_s1=base_s1,
-          input_cm=base_m1,
-          t_wait=t_wait,
-          t_sim=t_reward,
-          training=True)
+    sim_time, out = trial(input_pm=base_pm,
+                          input_s1=base_s1,
+                          input_cm=base_m1,
+                          t_wait=t_wait,
+                          t_sim=t_reward,
+                          training=True)
 
-    return new_thetas
+    return new_thetas, out, sim_time
 
 
 def test_movement(current_thetas: np.ndarray,
@@ -135,27 +131,23 @@ def test_movement(current_thetas: np.ndarray,
                   scale_s1: float = 1.0,
                   t_movement: float = 400.,
                   t_wait: float = 50.,
-                  arms_model: PlanarArms | None = None):
-
+                  arms_model: PlanarArms | None = None) -> tuple[np.ndarray, np.ndarray, float]:
     # make inputs for PM
     input_pm, input_s1, _, new_thetas = make_inputs(current_angles=current_thetas,
                                                     end_point=point_to_reach)
 
-    _, output_theta = trial(input_pm=input_pm * scale_pm,
-                            input_s1=input_s1 * scale_s1,
-                            input_cm=None,
-                            t_wait=t_wait,
-                            t_sim=t_movement,
-                            training=False)
-
-    # update current angles in arm model
-    error = np.array((output_theta[0] - new_thetas[0], output_theta[1] - new_thetas[1]))
+    sim_time, output_theta = trial(input_pm=input_pm * scale_pm,
+                                   input_s1=input_s1 * scale_s1,
+                                   input_cm=None,
+                                   t_wait=t_wait,
+                                   t_sim=t_movement,
+                                   training=False)
 
     output_theta = PlanarArms.clip_values(output_theta, radians=False)
     if arms_model is not None:
         arms_model.change_angle(arm='right', new_thetas=output_theta, radians=False)
 
-    return new_thetas, error
+    return new_thetas, output_theta, sim_time
 
 
 def test_perturbation(current_thetas: np.ndarray,
@@ -167,7 +159,7 @@ def test_perturbation(current_thetas: np.ndarray,
                       t_init: float = 50.,
                       t_movement: float = 400.,
                       t_wait: float = 50.,
-                      arms_model: PlanarArms | None = None):
+                      arms_model: PlanarArms | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, float]:
     # make inputs
     input_pm_init, input_s1_init, _, _ = make_inputs(current_angles=current_thetas,
                                                      end_point=point_to_reach)
@@ -182,26 +174,25 @@ def test_perturbation(current_thetas: np.ndarray,
     _, input_s1, _, new_thetas = make_inputs(current_angles=current_thetas,
                                              end_point=point_to_reach)
 
-    trial(input_pm=input_pm_init * scale_pm,
-          input_s1=input_s1_init * scale_s1,
-          input_cm=None,
-          t_wait=t_wait,
-          t_sim=t_init,
-          training=False,
-          reset=False)
+    sim_time_1, output_theta_1 = trial(input_pm=input_pm_init * scale_pm,
+                                       input_s1=input_s1_init * scale_s1,
+                                       input_cm=None,
+                                       t_wait=t_wait,
+                                       t_sim=t_init,
+                                       training=False,
+                                       reset=False)
 
-    _, output_theta = trial(input_pm=input_pm_init * scale_pm,
-                            input_s1=input_s1 * scale_s1,
-                            input_cm=None,
-                            t_wait=0.,
-                            t_sim=t_movement,
-                            training=False)
+    sim_time_2, output_theta_2 = trial(input_pm=input_pm_init * scale_pm,
+                                       input_s1=input_s1 * scale_s1,
+                                       input_cm=None,
+                                       t_wait=0.,
+                                       t_sim=t_movement,
+                                       training=False)
 
-    error = np.array((output_theta[0] - new_thetas[0], output_theta[1] - new_thetas[1]))
-    output_theta = PlanarArms.clip_values(output_theta, radians=False)
+    output_theta_2 = PlanarArms.clip_values(output_theta_2, radians=False)
 
     if arms_model is not None:
         arms_model.change_angle(arm='right', new_thetas=current_thetas, radians=False, num_iterations=int(t_init))
-        arms_model.change_angle(arm='right', new_thetas=output_theta, radians=False, num_iterations=int(t_movement))
+        arms_model.change_angle(arm='right', new_thetas=output_theta_2, radians=False, num_iterations=int(t_movement))
 
-    return new_thetas, error
+    return new_thetas, output_theta_1, output_theta_1, sim_time_1, sim_time_2, perturbation_shoulder, perturbation_elbow

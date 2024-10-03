@@ -11,7 +11,6 @@ def generate_random_coordinate(theta_bounds_lower: float = parameters['theta_lim
                                clip_borders_theta: float = 10.,
                                clip_borders_xy: float = 10.,
                                init_thetas: np.ndarray | None = None,
-                               normalize_xy: bool = False,
                                return_thetas_radians: bool = False) -> tuple[np.ndarray, np.ndarray]:
 
     valid = False
@@ -40,15 +39,22 @@ def generate_random_coordinate(theta_bounds_lower: float = parameters['theta_lim
     if return_thetas_radians:
         random_thetas = np.radians(random_thetas)
 
-    if not normalize_xy:
-        return random_thetas, random_xy
-    else:
-        # Normalize random_xy
-        normalized_x = (random_xy[0] - x_bounds[0]) / (x_bounds[1] - x_bounds[0])
-        normalized_y = (random_xy[1] - y_bounds[0]) / (y_bounds[1] - y_bounds[0])
-        normalized_xy = np.array([normalized_x, normalized_y])
+    return random_thetas, random_xy
 
-        return random_thetas, normalized_xy
+
+def norm_xy(xy: np.ndarray,
+            x_bounds: tuple[float, float] = parameters['x_reaching_space_limits'],
+            y_bounds: tuple[float, float] = parameters['y_reaching_space_limits'],
+            clip_borders_xy: float = 10.) -> np.ndarray:
+
+    x_bounds = (x_bounds[0] + clip_borders_xy, x_bounds[1] - clip_borders_xy)
+    y_bounds = (y_bounds[0] + clip_borders_xy, y_bounds[1] - clip_borders_xy)
+
+    normalized_x = (xy[0] - x_bounds[0]) / (x_bounds[1] - x_bounds[0])
+    normalized_y = (xy[1] - y_bounds[0]) / (y_bounds[1] - y_bounds[0])
+    normalized_xy = np.array([normalized_x, normalized_y])
+
+    return normalized_xy
 
 
 def safe_save(save_name: str, array: np.ndarray) -> None:
@@ -67,3 +73,13 @@ def safe_save(save_name: str, array: np.ndarray) -> None:
         np.save(save_name, array)
     else:
         np.save(save_name + '.npy', array)
+
+
+if __name__ == '__main__':
+
+    for _ in range(100):
+        random_thetas, random_xy = generate_random_coordinate()
+        print(random_thetas, random_xy)
+
+        norm = norm_xy(random_xy)
+        print(norm)

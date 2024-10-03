@@ -1,5 +1,5 @@
 import numpy as np
-
+from os import path, makedirs
 from network.model import *
 from create_inputs import (train_position,
                            train_fixed_position,
@@ -23,7 +23,6 @@ def training(N_trials: int,
              save_synapses: bool = False,
              animate_populations: bool = False,
              plot_error: bool = False) -> None:
-
     # look for possible errors
     if pop_monitor is None and animate_populations is True:
         raise ValueError('PopMonitor must be specified if animate populations is True')
@@ -37,16 +36,31 @@ def training(N_trials: int,
     if con_monitor is not None:
         con_monitor.extract_weights()
 
-    errors = []
-    sim_times = []
+    training_infos = {
+        'init_angle': init_angle,
+        'target_angle': [],
+        'output_angle': [],
+        'sim_time': [],
+        'error': [],
+    }
 
     for trial in range(N_trials):
         init_angle, out, sim_time = train_position(current_thetas=init_angle,
                                                    t_reward=reward_time,
                                                    t_wait=wait_time)
 
-        errors.append((init_angle[0] - out[0], init_angle[1] - out[1]))
-        sim_times.append(sim_time)
+        training_infos['target_angle'].append(init_angle)
+        training_infos['output_angle'].append(out)
+        training_infos['sim_time'].append(sim_time)
+        training_infos['error'].append(
+            np.linalg.norm(
+                PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=init_angle, radians=False)[:, -1]
+                - PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=out, radians=False)[:, -1]))
+
+    # save infos
+    if not path.exists('results/' + 'training_' + save_path):
+        makedirs('results/' + 'training_' + save_path)
+    np.savez('results/' + 'training_' + save_path + 'data.npz', **training_infos, allow_pickle=True)
 
     # saving data
     # rates
@@ -60,18 +74,12 @@ def training(N_trials: int,
         con_monitor.save_cons(folder='results/' + 'training_' + save_path)
         con_monitor.reset()
 
-    # additional data
-    safe_save('results/' + 'training_' + save_path + 'training_times.npy', np.array(sim_times))
-    safe_save('results/' + 'training_' + save_path + 'error.npy', np.array(errors))
-
     if save_synapses:
         ann.save('results/' + 'training_' + save_path + 'synaptic_weights.npz', populations=False)
 
     if plot_error:
-        fig, axs = plt.subplots(nrows=2)
-        axs[0].plot(np.array(errors)[:, 0], label='Shoulder')
-        axs[1].plot(np.array(errors)[:, 1], label='Elbow')
-        plt.legend()
+        fig, ax = plt.subplots()
+        ax.plot(np.array(training_infos['error']))
         plt.savefig('results/' + 'training_' + save_path + 'error.png')
         plt.close(fig)
 
@@ -149,8 +157,8 @@ def test_reach(init_angle: np.ndarray,
                arms_model: PlanarArms | None = None,
                show_plot: bool = False,
                scale_pm: float = 1.0,
-               scale_s1: float = 1.0) -> None:
-
+               scale_s1: float = 1.0,
+               num_random_points: int = 100) -> None:
     # look for possible errors
     if pop_monitor is None and animate_populations is True:
         raise ValueError('Monitor populations must be specified if animate populations is True')
@@ -164,7 +172,7 @@ def test_reach(init_angle: np.ndarray,
         points_to_follow = parameters['test_trajectory_circle']
     elif test_condition == 'random':
         points_to_follow = []
-        for _ in range(100):
+        for _ in range(num_random_points):
             _, points = generate_random_coordinate()
             points_to_follow.append(points)
     else:
@@ -174,26 +182,38 @@ def test_reach(init_angle: np.ndarray,
     if pop_monitor is not None:
         pop_monitor.start()
 
-    errors = []
-    for point in points_to_follow:
-        init_angle, error = test_movement(current_thetas=init_angle,
-                                          point_to_reach=point,
-                                          scale_pm=scale_pm,
-                                          scale_s1=scale_s1,
-                                          t_movement=movement_time,
-                                          t_wait=wait_time,
-                                          arms_model=arms_model)
+    test_infos = {
+        'init_angle': init_angle,
+        'target_angle': [],
+        'output_angle': [],
+        'sim_time': [],
+        'error': [],
+    }
 
-        errors.append(error)
+    for point in points_to_follow:
+        init_angle, out, sim_time = test_movement(current_thetas=init_angle,
+                                                  point_to_reach=point,
+                                                  scale_pm=scale_pm,
+                                                  scale_s1=scale_s1,
+                                                  t_movement=movement_time,
+                                                  t_wait=wait_time,
+                                                  arms_model=arms_model)
+
+        test_infos['target_angle'].append(point)
+        test_infos['output_angle'].append(out)
+        test_infos['sim_time'].append(sim_time)
+        test_infos['error'].append(
+            np.linalg.norm(
+                point - PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=out, radians=False)[:, -1]))
 
     # saving data
-    safe_save(save_name='results/' + 'test_' + save_path + 'error.npy', array=np.array(errors))
+    if not path.exists('results/' + 'test_' + save_path):
+        makedirs('results/' + 'test_' + save_path)
+    np.savez('results/' + 'test_' + save_path + 'data.npz', **test_infos, allow_pickle=True)
 
     if plot_error:
-        fig, axs = plt.subplots(nrows=2)
-        axs[0].plot(np.array(errors)[:, 0], label='Shoulder')
-        axs[1].plot(np.array(errors)[:, 1], label='Elbow')
-        plt.legend()
+        fig, ax = plt.subplots()
+        ax.plot(np.array(test_infos['error']))
         plt.savefig('results/' + 'test_' + save_path + 'error.png')
         if show_plot:
             plt.show()
@@ -252,8 +272,20 @@ def test_perturb(init_angle: np.ndarray,
         pop_monitor.start()
 
     # test
-    errors = []
+    test_infos = {
+        'init_angle': init_angle,
+        'target_angle': [],
+        'output_before_pert': [],
+        'output_after_pert': [],
+        'sim_time_before_pert': [],
+        'sim_time_after_pert': [],
+        'perturbation_shoulder': [],
+        'perturbation_elbow': [],
+        'error_before_pert': [],
+        'error_after_pert': [],
+    }
     points = []
+
     for trial in range(N_trials):
         _, random_point = generate_random_coordinate()
         points.append(random_point)
@@ -262,26 +294,39 @@ def test_perturb(init_angle: np.ndarray,
         pert_sh, pert_el = np.random.uniform(-perturbation_scale, perturbation_scale, size=2)
 
         # run perturbation trial
-        init_angle, error = test_perturbation(current_thetas=init_angle,
-                                              point_to_reach=random_point,
-                                              perturbation_shoulder=pert_sh,
-                                              perturbation_elbow=pert_el,
-                                              scale_pm=scale_pm,
-                                              scale_s1=scale_s1,
-                                              t_init=pre_movement_time,
-                                              t_movement=movement_time,
-                                              t_wait=wait_time,
-                                              arms_model=arms_model)
+        init_angle, out_1, out_2, sim_time_1, sim_time_2, pert_sh, pert_el = test_perturbation(
+            current_thetas=init_angle,
+            point_to_reach=random_point,
+            perturbation_shoulder=pert_sh,
+            perturbation_elbow=pert_el,
+            scale_pm=scale_pm,
+            scale_s1=scale_s1,
+            t_init=pre_movement_time,
+            t_movement=movement_time,
+            t_wait=wait_time,
+            arms_model=arms_model)
 
-        errors.append(error)
+        test_infos['target_angle'].append(init_angle)
+        test_infos['output_before_pert'].append(out_1)
+        test_infos['output_after_pert'].append(out_2)
+        test_infos['sim_time_before_pert'].append(sim_time_1)
+        test_infos['sim_time_after_pert'].append(sim_time_2)
+        test_infos['perturbation_shoulder'].append(pert_sh)
+        test_infos['perturbation_elbow'].append(pert_el)
+        test_infos['error_before_pert'].append(
+            np.linalg.norm(random_point - PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=out_1, radians=False)[:, -1]))
+        test_infos['error_after_pert'].append(
+            np.linalg.norm(random_point - PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=out_2, radians=False)[:, -1]))
 
     # saving data
-    safe_save(save_name='results/' + 'test_pert_' + save_path + 'error.npy', array=np.array(errors))
+    if not path.exists('results/' + 'test_pert_' + save_path):
+        makedirs('results/' + 'test_pert_' + save_path)
+    np.savez_compressed('results/' + 'test_pert_' + save_path + 'data.npz', **test_infos, allow_pickle=True)
 
     if plot_error:
         fig, axs = plt.subplots(nrows=2)
-        axs[0].plot(np.array(errors)[:, 0], label='Shoulder')
-        axs[1].plot(np.array(errors)[:, 1], label='Elbow')
+        axs[0].plot(np.array(test_infos['error_before_pert']), label='Before perturbation')
+        axs[1].plot(np.array(test_infos['error_after_pert']), label='After perturbation')
         plt.legend()
         plt.savefig('results/' + 'test_pert_' + save_path + 'error.png')
         if show_plots:
@@ -325,7 +370,6 @@ def check_gain(
         target_angle: bool = False,
         sim_time: float = 150.
 ):
-
     if PopMonitor is not None:
         pop_monitor.start()
 
