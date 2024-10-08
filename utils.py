@@ -50,11 +50,19 @@ def norm_xy(xy: np.ndarray,
     x_bounds = (x_bounds[0] + clip_borders_xy, x_bounds[1] - clip_borders_xy)
     y_bounds = (y_bounds[0] + clip_borders_xy, y_bounds[1] - clip_borders_xy)
 
-    normalized_x = (xy[0] - x_bounds[0]) / (x_bounds[1] - x_bounds[0])
-    normalized_y = (xy[1] - y_bounds[0]) / (y_bounds[1] - y_bounds[0])
-    normalized_xy = np.array([normalized_x, normalized_y])
+    # Calculate the midpoints of x and y ranges
+    x_mid = (x_bounds[0] + x_bounds[1]) / 2
+    y_mid = (y_bounds[0] + y_bounds[1]) / 2
 
-    return normalized_xy
+    # Calculate the half-ranges
+    x_half_range = (x_bounds[1] - x_bounds[0]) / 2
+    y_half_range = (y_bounds[1] - y_bounds[0]) / 2
+
+    # Normalize to [-1, 1]
+    normalized_x = (xy[0] - x_mid) / x_half_range
+    normalized_y = (xy[1] - y_mid) / y_half_range
+
+    return np.array([normalized_x, normalized_y])
 
 
 def safe_save(save_name: str, array: np.ndarray) -> None:
@@ -79,7 +87,6 @@ if __name__ == '__main__':
 
     for _ in range(100):
         random_thetas, random_xy = generate_random_coordinate()
-        print(random_thetas, random_xy)
 
         norm = norm_xy(random_xy)
-        print(norm)
+        print(random_xy, norm)
