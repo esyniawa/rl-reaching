@@ -209,7 +209,7 @@ def test_reach(init_angle: np.ndarray,
     # saving data
     if not path.exists('results/' + 'test_' + save_path):
         makedirs('results/' + 'test_' + save_path)
-    np.savez('results/' + 'test_' + save_path + 'data.npz', **test_infos, allow_pickle=True)
+    np.savez('results/' + 'test_' + save_path + 'data.npz', **test_infos)
 
     if plot_error:
         fig, ax = plt.subplots()
@@ -321,7 +321,7 @@ def test_perturb(init_angle: np.ndarray,
     # saving data
     if not path.exists('results/' + 'test_pert_' + save_path):
         makedirs('results/' + 'test_pert_' + save_path)
-    np.savez_compressed('results/' + 'test_pert_' + save_path + 'data.npz', **test_infos, allow_pickle=True)
+    np.savez('results/' + 'test_pert_' + save_path + 'data.npz', **test_infos)
 
     if plot_error:
         fig, axs = plt.subplots(nrows=2)

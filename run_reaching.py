@@ -19,7 +19,7 @@ if __name__ == '__main__':
     exp_args = exp_parser.parse_args()
 
     # number of training trials
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000,)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 52_000)
     test_condition = exp_args.test_reach_condition
 
     # init angle of arms
@@ -69,14 +69,15 @@ if __name__ == '__main__':
                    test_condition=test_condition,
                    plot_error=True,
                    animate_populations=True,
-                   arms_model=my_arms)
+                   arms_model=my_arms,
+                   num_random_points=100)
 
         if exp_args.animate_arms:
             my_arms.reset_all()
 
         if exp_args.test_pert:
             test_perturb(init_angle=init_angle,
-                         N_trials=10,
+                         N_trials=20,
                          save_path=folder + subfolder,
                          pop_monitor=PopMonitor_testing,
                          plot_error=True,

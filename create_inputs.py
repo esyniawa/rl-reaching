@@ -156,7 +156,7 @@ def test_perturbation(current_thetas: np.ndarray,
                       perturbation_elbow: float | None = None,
                       scale_pm: float = 2.0,
                       scale_s1: float = 1.0,
-                      t_init: float = 50.,
+                      t_init: float = 100.,
                       t_movement: float = 400.,
                       t_wait: float = 50.,
                       arms_model: PlanarArms | None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, float]:
@@ -192,7 +192,7 @@ def test_perturbation(current_thetas: np.ndarray,
     output_theta_2 = PlanarArms.clip_values(output_theta_2, radians=False)
 
     if arms_model is not None:
-        arms_model.change_angle(arm='right', new_thetas=current_thetas, radians=False, num_iterations=int(t_init))
-        arms_model.change_angle(arm='right', new_thetas=output_theta_2, radians=False, num_iterations=int(t_movement))
+        arms_model.change_angle(arm=parameters['moving_arm'], new_thetas=current_thetas, radians=False, num_iterations=int(t_init))
+        arms_model.change_angle(arm=parameters['moving_arm'], new_thetas=output_theta_2, radians=False, num_iterations=int(t_movement))
 
-    return new_thetas, output_theta_1, output_theta_1, sim_time_1, sim_time_2, perturbation_shoulder, perturbation_elbow
+    return new_thetas, output_theta_1, output_theta_2, sim_time_1, sim_time_2, perturbation_shoulder, perturbation_elbow

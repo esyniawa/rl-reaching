@@ -27,7 +27,7 @@ for durchgang in $(seq $durchgaenge); do
 
     for i in $(seq $parallel); do
         let y=$i+$parallel*$((durchgang - 1))
-        python run_reaching.py --id $y --test_pert 0 --test_reach_condition 'random' &
+        python run_reaching.py --id $y --test_pert 1 --test_reach_condition 'random' &
     done
     wait
 
@@ -52,5 +52,3 @@ total_runtime=$(seconds_to_dhm $total_duration)
 
 echo "Total runtime: $total_runtime"
 echo "Total runtime: $total_runtime" >> "$total_runtime_file"
-
-python validate_reaching.py --id 0 --n_trials 2000 --con_monitor 1
