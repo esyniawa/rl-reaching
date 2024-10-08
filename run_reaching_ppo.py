@@ -41,9 +41,9 @@ class ActorNetwork(nn.Module):
         super(ActorNetwork, self).__init__()
         self.shared = nn.Sequential(
             nn.Linear(input_dim, hidden_layer_size),
-            nn.ReLU(),
+            nn.Tanh(),
             nn.Linear(hidden_layer_size, 64),
-            nn.ReLU()
+            nn.Tanh()
         )
         self.actor_mean = nn.Linear(64, output_dim)
         self.actor_std = nn.Linear(64, output_dim)
@@ -60,7 +60,7 @@ class CriticNetwork(nn.Module):
         super(CriticNetwork, self).__init__()
         self.critic = nn.Sequential(
             nn.Linear(input_dim, hidden_layer_size),
-            nn.ReLU(),
+            nn.Tanh(),
             nn.Linear(hidden_layer_size, 1)
         )
 
@@ -85,17 +85,20 @@ class PPOAgent:
         self.epochs = epochs
         self.batch_size = batch_size
 
-    def get_action(self, state, add_exploration_noise: None | float = None):
+    def get_action(self, state, seed: int | None = None, add_exploration_noise: float | None = None):
+        if seed is not None:
+            torch.manual_seed(seed)
+
         with torch.no_grad():
-            state = torch.FloatTensor(state).unsqueeze(0)  # Add batch dimension
+            state = torch.FloatTensor(state)
             mean, std = self.actor(state)
+
             # add noise to std to encourage or discourage exploration
             if add_exploration_noise is not None:
                 std *= torch.abs(torch.randn_like(std) * add_exploration_noise)
 
             dist = Normal(mean, std)
             action = dist.sample()
-
             log_prob = dist.log_prob(action).sum(dim=-1)
         return action.squeeze(0).numpy(), log_prob.squeeze(0).numpy()
 
@@ -174,6 +177,7 @@ class ReachingEnvironment:
     def __init__(self,
                  target_thetas: np.ndarray,
                  init_thetas: np.ndarray,
+                 target_pos: np.ndarray | None = None,
                  arm: str = 'right'):
         """
 
@@ -185,9 +189,13 @@ class ReachingEnvironment:
         self.arm = arm
         self.init_thetas = init_thetas
         self.current_thetas = init_thetas.copy()
-        self.target_thetas, self.target_pos = target_thetas, PlanarArms.forward_kinematics(arm=self.arm,
-                                                                                           thetas=target_thetas,
-                                                                                           radians=True)[:, -1]
+        self.target_thetas = target_thetas
+        if target_pos is None:
+            self.target_pos = PlanarArms.forward_kinematics(arm=self.arm, thetas=self.target_thetas, radians=True)[:, -1]
+        else:
+            self.target_pos = target_pos
+
+        # normalize target position to [0, 1]
         self.norm_target_pos = norm_xy(self.target_pos)
 
     @staticmethod
@@ -206,56 +214,55 @@ class ReachingEnvironment:
                        target_pos: np.ndarray,
                        init_thetas: np.ndarray):
 
-        self.init_thetas, self.current_thetas = init_thetas, init_thetas.copy()
+        self.init_thetas, self.current_thetas = init_thetas, init_thetas
         self.target_thetas, self.target_pos = target_thetas, target_pos
         self.norm_target_pos = norm_xy(target_pos)
 
     def step(self,
-             action: np.ndarray, abort_criteria: float = 5,  # in [mm]m
-             max_angle_change: float = np.radians(10),
+             action: np.ndarray,
+             abort_criteria: float = 1,  # in [mm]
+             max_angle_change: float = np.radians(5),
+             reward_gaussian: bool = True,
              clip_thetas: bool = True):
 
-        delta_thetas = np.clip(action, -max_angle_change, max_angle_change)  # prevent very large angle changes
-
         # clip angles to joint constraints
-        new_thetas = self.current_thetas + delta_thetas
+        self.current_thetas += action * max_angle_change
         if clip_thetas:
-            new_thetas = PlanarArms.clip_values(new_thetas, radians=True)
+            self.current_thetas = PlanarArms.clip_values(self.current_thetas, radians=True)
 
         # Calculate new position
-        new_pos = PlanarArms.forward_kinematics(self.arm, new_thetas, radians=True, check_limits=False)[:, -1]
+        new_pos = PlanarArms.forward_kinematics(self.arm, self.current_thetas, radians=True, check_limits=False)[:, -1]
 
         # Calculate reward
         distance = np.linalg.norm(new_pos - self.target_pos)
         # TODO: Try different reward functions
-        reward = gaussian_reward(error=distance, sigma=25.)
-        # reward smoother actions
-        reward += 0.1 * (1.0 - np.sum(np.abs(action)) / (2 * max_angle_change))
+        reward = linear_reward(error=distance, max_distance=PlanarArms.upper_arm_length + PlanarArms.forearm_length)
+        if reward_gaussian:
+            reward += gaussian_reward(error=distance, sigma=15)
         done = distance < abort_criteria
 
-        self.current_thetas = new_thetas
         return np.concatenate([self.current_thetas, self.norm_target_pos]), reward, done
 
 
 def collect_experience(args):
-    Agent, num_steps, init_thetas, target_thetas, seed = args
+    Agent, num_steps, init_thetas, target_thetas, target_pos = args
 
     # Set the seed for this worker
-    torch.manual_seed(seed)
-    np.random.seed(seed)
+    # seed = torch.seed()
 
-    env = ReachingEnvironment(target_thetas=target_thetas, init_thetas=init_thetas)
+    env = ReachingEnvironment(target_thetas=target_thetas, target_pos=target_pos, init_thetas=init_thetas)
     state = env.reset()
     experiences = []
 
     for _ in range(num_steps):
-        action, log_prob = Agent.get_action(state)
+        action, log_prob = Agent.get_action(state, add_exploration_noise=None, seed=None)
         next_state, reward, done = env.step(action)
         experiences.append((state, action, reward, next_state, done, log_prob))
         state = next_state
         if done:
             break
 
+    del env
     return experiences
 
 
@@ -273,10 +280,10 @@ def train_ppo(Agent: PPOAgent,
 
     for trial in range(num_reaching_trials):
         # Initialize target for the environment
-        target_thetas, _ = ReachingEnvironment.random_target(init_thetas=init_thetas)
+        target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
 
         # Collect experiences using multiple workers
-        worker_args = [(Agent, steps_per_worker, init_thetas, target_thetas, i) for i in range(num_workers)]
+        worker_args = [(Agent, steps_per_worker, init_thetas, target_thetas, target_pos) for _ in range(num_workers)]
         worker_experiences = pool.map(collect_experience, worker_args)
 
         # Add experiences to the replay buffer
@@ -300,8 +307,8 @@ def test_ppo(Agent: PPOAgent,
              max_steps: int = 200,  # beware the actions are clipped
              ) -> dict:
 
-    target_thetas, _ = ReachingEnvironment.random_target(init_thetas=init_thetas)
-    ReachEnv = ReachingEnvironment(init_thetas=init_thetas, target_thetas=target_thetas)
+    target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
+    ReachEnv = ReachingEnvironment(init_thetas=init_thetas, target_thetas=target_thetas, target_pos=target_pos)
 
     test_results = {
         'targets_thetas': [],
@@ -329,8 +336,9 @@ def test_ppo(Agent: PPOAgent,
         test_results['total_reward'].append(episode_reward)
 
         # set new targets
-        new_target_thetas, new_target_pos = ReachingEnvironment.random_target(init_thetas=target_thetas)
-        ReachEnv.set_parameters(target_thetas=new_target_thetas, target_pos=new_target_pos, init_thetas=target_thetas)
+        init_thetas = target_thetas
+        target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
+        ReachEnv.set_parameters(target_thetas=target_thetas, target_pos=target_pos, init_thetas=init_thetas)
 
     return test_results
 
@@ -356,7 +364,7 @@ if __name__ == "__main__":
             os.makedirs(path)
 
     # parameters
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000,)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 52_000)
     test_trials = sim_args.num_testing_trials
 
     # initialize agent
