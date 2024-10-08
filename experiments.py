@@ -183,14 +183,16 @@ def test_reach(init_angle: np.ndarray,
         pop_monitor.start()
 
     test_infos = {
-        'init_angle': init_angle,
+        'init_angle': [],
         'target_angle': [],
+        'target_pos': [],
         'output_angle': [],
         'sim_time': [],
         'error': [],
     }
 
     for point in points_to_follow:
+        test_infos['init_angle'].append(init_angle)
         init_angle, out, sim_time = test_movement(current_thetas=init_angle,
                                                   point_to_reach=point,
                                                   scale_pm=scale_pm,
@@ -199,7 +201,8 @@ def test_reach(init_angle: np.ndarray,
                                                   t_wait=wait_time,
                                                   arms_model=arms_model)
 
-        test_infos['target_angle'].append(point)
+        test_infos['target_angle'].append(init_angle)
+        test_infos['target_pos'].append(point)
         test_infos['output_angle'].append(out)
         test_infos['sim_time'].append(sim_time)
         test_infos['error'].append(
@@ -273,8 +276,9 @@ def test_perturb(init_angle: np.ndarray,
 
     # test
     test_infos = {
-        'init_angle': init_angle,
+        'init_angle': [],
         'target_angle': [],
+        'target_pos': [],
         'output_before_pert': [],
         'output_after_pert': [],
         'sim_time_before_pert': [],
@@ -294,6 +298,7 @@ def test_perturb(init_angle: np.ndarray,
         pert_sh, pert_el = np.random.uniform(-perturbation_scale, perturbation_scale, size=2)
 
         # run perturbation trial
+        test_infos['init_angle'].append(init_angle)
         init_angle, out_1, out_2, sim_time_1, sim_time_2, pert_sh, pert_el = test_perturbation(
             current_thetas=init_angle,
             point_to_reach=random_point,
@@ -307,6 +312,7 @@ def test_perturb(init_angle: np.ndarray,
             arms_model=arms_model)
 
         test_infos['target_angle'].append(init_angle)
+        test_infos['target_pos'].append(random_point)
         test_infos['output_before_pert'].append(out_1)
         test_infos['output_after_pert'].append(out_2)
         test_infos['sim_time_before_pert'].append(sim_time_1)
