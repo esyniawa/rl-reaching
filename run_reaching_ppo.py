@@ -313,7 +313,10 @@ def test_ppo(Agent: PPOAgent,
     test_results = {
         'targets_thetas': [],
         'executed_thetas': [],
+        'target_pos': [],
+        'error': [],
         'total_reward': [],
+        'steps': [],
     }
 
     for trial in range(num_reaching_trials):
@@ -331,9 +334,15 @@ def test_ppo(Agent: PPOAgent,
             if done:
                 break
 
-        test_results['targets_thetas'].append(ReachEnv.target_thetas)
+        test_results['target_thetas'].append(ReachEnv.target_thetas)
         test_results['executed_thetas'].append(ReachEnv.current_thetas)
+        test_results['target_pos'].append(ReachEnv.target_pos)
+        test_results['error'].append(
+            np.linalg.norm(ReachEnv.target_pos - PlanarArms.forward_kinematics(arm=ReachEnv.arm,
+                                                                               thetas=ReachEnv.current_thetas,
+                                                                               radians=True)[:, -1]))
         test_results['total_reward'].append(episode_reward)
+        test_results['steps'].append(step + 1)
 
         # set new targets
         init_thetas = target_thetas
@@ -389,18 +398,10 @@ if __name__ == "__main__":
             os.makedirs(save_path_testing + subfolder)
         np.savez(save_path_testing + subfolder + 'results.npz', **results_dict)
 
-        errors = []
-        for target, exec in zip(results_dict['targets_thetas'], results_dict['executed_thetas']):
-            error = np.linalg.norm(PlanarArms.forward_kinematics(arm='right', thetas=target)[:, -1] -
-                                   PlanarArms.forward_kinematics(arm='right', thetas=exec)[:, -1])
-            errors.append(error)
-
-        np.save(save_path_testing + subfolder + 'error.npy', np.array(errors))
-
         if sim_args.do_plot:
             fig, axs = plt.subplots(nrows=2)
-            axs[0].plot(np.array(errors))
-            axs[0].set_title('Error')
+            axs[0].plot(np.array(results_dict['error']))
+            axs[0].set_title('Error in [mm]')
             axs[1].plot(np.array(results_dict['total_reward']))
             axs[1].set_title('Reward')
             plt.savefig(save_path_testing + subfolder + 'error.pdf', dpi=300, bbox_inches='tight', pad_inches=0)
