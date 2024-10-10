@@ -231,7 +231,8 @@ class ReachingEnvironment:
             self.current_thetas = PlanarArms.clip_values(self.current_thetas, radians=True)
 
         # Calculate new position
-        new_pos = PlanarArms.forward_kinematics(self.arm, self.current_thetas, radians=True, check_limits=False)[:, -1]
+        new_pos = PlanarArms.forward_kinematics(self.arm, self.current_thetas,
+                                                radians=True, check_limits=clip_thetas)[:, -1]
 
         # Calculate reward
         distance = np.linalg.norm(new_pos - self.target_pos)

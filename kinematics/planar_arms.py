@@ -57,9 +57,9 @@ class PlanarArms:
         if not radians:
             angles = np.radians(angles)
 
-        if angles[0] <= PlanarArms.l_upper_arm_limit or angles[0] >= PlanarArms.u_upper_arm_limit:
+        if angles[0] < PlanarArms.l_upper_arm_limit or angles[0] > PlanarArms.u_upper_arm_limit:
             raise AssertionError('Check joint limits for upper arm')
-        elif angles[1] <= PlanarArms.l_forearm_limit or angles[1] >= PlanarArms.u_forearm_limit:
+        elif angles[1] < PlanarArms.l_forearm_limit or angles[1] > PlanarArms.u_forearm_limit:
             raise AssertionError('Check joint limits for forearm')
 
         return angles
