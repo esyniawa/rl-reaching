@@ -272,7 +272,7 @@ def train_ppo(Agent: PPOAgent,
               num_workers: int = 10,
               buffer_capacity: int = 2000,
               steps_per_worker: int = 200,
-              num_updates: int = 2,
+              num_updates: int = 4,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
     replay_buffer = ExperienceBuffer(buffer_capacity)
@@ -334,13 +334,15 @@ def test_ppo(Agent: PPOAgent,
             if done:
                 break
 
+        print(ReachEnv.current_thetas)
         test_results['target_thetas'].append(ReachEnv.target_thetas)
         test_results['executed_thetas'].append(ReachEnv.current_thetas)
         test_results['target_pos'].append(ReachEnv.target_pos)
         test_results['error'].append(
             np.linalg.norm(ReachEnv.target_pos - PlanarArms.forward_kinematics(arm=ReachEnv.arm,
                                                                                thetas=ReachEnv.current_thetas,
-                                                                               radians=True)[:, -1]))
+                                                                               radians=True,
+                                                                               check_limits=False)[:, -1]))
         test_results['total_reward'].append(episode_reward)
         test_results['steps'].append(step + 1)
 
