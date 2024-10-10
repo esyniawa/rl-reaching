@@ -335,7 +335,6 @@ def test_ppo(Agent: PPOAgent,
             if done:
                 break
 
-        print(ReachEnv.current_thetas)
         test_results['target_thetas'].append(ReachEnv.target_thetas)
         test_results['executed_thetas'].append(ReachEnv.current_thetas)
         test_results['target_pos'].append(ReachEnv.target_pos)
