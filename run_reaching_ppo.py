@@ -311,7 +311,7 @@ def test_ppo(Agent: PPOAgent,
     ReachEnv = ReachingEnvironment(init_thetas=init_thetas, target_thetas=target_thetas, target_pos=target_pos)
 
     test_results = {
-        'targets_thetas': [],
+        'target_thetas': [],
         'executed_thetas': [],
         'target_pos': [],
         'error': [],
