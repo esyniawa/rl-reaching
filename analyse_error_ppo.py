@@ -1,53 +1,74 @@
 import os
-import numpy as np
+from typing import Optional, Iterable
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from glob import glob
+
+from prepare_results_ppo import ppo_collect_simulation_data
 
 
-sims = (1, 2)
-error = {}
+def ppo_plot_error(sim_ids: Iterable[int],
+                   data_path: Optional[str] = 'analysis/ppo_simulation_results.parquet',
+                   save_path: Optional[str] = 'analysis/ppo_error_plot.pdf') -> None:
 
-for sim in sims:
-    for root, dirs, _ in os.walk(f'results/test_ppo_{sim}'):
-        for d in dirs:
-            if sim == sims[0]:
-                error[d] = []
+    if not os.path.isfile(data_path):
+        df = ppo_collect_simulation_data(sim_ids, data_path)
+    else:
+        df = pd.read_parquet(data_path)
 
-            data = np.load(os.path.join(root, d) + '/error.npy')
-            error[d].append(data)
+    # Calculate mean error and standard error for each n_training_trials, aggregated across all simulations
+    error_stats = df.groupby('n_training_trials')['error'].agg(['mean', 'sem']).reset_index()
+    error_stats.columns = ['n_training_trials', 'mean_error', 'sem_error']
 
-results = {}
-for i, key in enumerate(error):
-    result = np.array(error[key])
-    results['mean_shoulder_' + key] = np.abs(result[:, :, 0]).mean()
-    results['std_shoulder_' + key] = np.abs(result[:, :, 0]).std()
+    # Calculate mean reward and standard error for each n_training_trials, aggregated across all simulations
+    reward_stats = df.groupby('n_training_trials')['total_reward'].agg(['mean', 'sem']).reset_index()
+    reward_stats.columns = ['n_training_trials', 'mean_reward', 'sem_reward']
+    error_stats = error_stats.merge(reward_stats, on='n_training_trials')
 
-    results['mean_elbow_' + key] = np.abs(result[:, :, 1]).mean()
-    results['std_elbow_' + key] = np.abs(result[:, :, 1]).std()
+    # Calculate the upper and lower bounds for the error range
+    error_stats['lower_bound'] = error_stats['mean_error'] - error_stats['sem_error']
+    error_stats['upper_bound'] = error_stats['mean_error'] + error_stats['sem_error']
 
-n_training_trails = (1000, 2000)
-error = np.zeros((2, 2, len(n_training_trails)))
+    # Create the plot
+    fig, axs = plt.subplots(nrows=2, figsize=(10, 6))
 
-for i, trials in enumerate(n_training_trails):
-    error[0, 0, i] = results['mean_shoulder_model_' + str(trials)]
-    error[0, 1, i] = results['std_shoulder_model_' + str(trials)]
+    # Plot the mean line
+    axs[0].plot(error_stats['n_training_trials'], error_stats['mean_error'], 'b-', label='Mean Error')
 
-    error[1, 0, i] = results['mean_elbow_model_' + str(trials)]
-    error[1, 1, i] = results['std_elbow_model_' + str(trials)]
+    # Add the shaded error range
+    axs[0].fill_between(error_stats['n_training_trials'], error_stats['lower_bound'], error_stats['upper_bound'],
+                     alpha=0.3, label='Standard Error Range')
+    axs[0].set_xticks(df['n_training_trials'].unique())
+    axs[0].set_xlabel('Number of Training Trials')
+    axs[0].set_ylabel('Mean Error in [mm]')
+    axs[0].legend()
 
-fig, axs = plt.subplots(ncols=2, figsize=(6, 3), sharey=True)
-axs[0].plot(error[0, 0, :], label='$\\theta_{shoulder}$', color='orange')
-axs[1].plot(error[1, 0, :], label='$\\theta_{elbow}$', color='blue')
+    # Add value labels
+    for _, row in error_stats.iterrows():
+        axs[0].text(row['n_training_trials'], row['mean_error'],
+                 f'{row["mean_error"]:.2f}±{row["sem_error"]:.2f}',
+                 ha='right', va='bottom')
 
-axs[0].fill_between(np.arange(0, len(n_training_trails)), error[0, 0, :] - error[0, 1, :], error[0, 0, :] + error[0, 1, :], color='orange',  alpha=0.2)
-axs[1].fill_between(np.arange(0, len(n_training_trails)), error[1, 0, :] - error[1, 1, :], error[1, 0, :] + error[1, 1, :], color='blue', alpha=0.2)
+    axs[1].plot(error_stats['n_training_trials'], error_stats['mean_reward'], 'r-', label='Mean Reward')
+    axs[1].fill_between(error_stats['n_training_trials'], error_stats['mean_reward'] - error_stats['sem_reward'],
+                        error_stats['mean_reward'] + error_stats['sem_reward'], color='r',
+                        alpha=0.3, label='Standard Error Range')
+    axs[1].set_xticks(df['n_training_trials'].unique())
+    axs[1].set_xlabel('Number of Training Trials')
+    axs[1].set_ylabel('Mean Reward')
+    axs[1].legend()
 
-axs[0].set_xlabel('# of training trials in thousands'), axs[1].set_xlabel('# of training trials in thousands')
-axs[0].set_ylabel('Error in [°]')
+    plt.tight_layout()
 
-axs[0].legend(), axs[1].legend()
-axs[0].set_ylim(0, np.pi), axs[1].set_ylim(0, np.pi)
-axs[0].set_xticks(np.arange(0, len(n_training_trails)), np.array(n_training_trails)/1000)
-axs[1].set_xticks(np.arange(0, len(n_training_trails)), np.array(n_training_trails)/1000)
+    # Save the plot
+    if save_path is not None:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, bbox_inches='tight', pad_inches=0, dpi=300)
 
-plt.savefig('ppo_error.pdf', dpi=300, bbox_inches='tight', pad_inches=0)
-plt.show()
+    plt.show()
+
+
+if __name__ == '__main__':
+    sim_ids = (1, 2, 3)
+    ppo_plot_error(sim_ids)

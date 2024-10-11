@@ -5,9 +5,8 @@ from glob import glob
 from typing import Optional, Iterable
 
 
-def collect_simulation_data(sim_ids: Iterable[int],
-                            save_path: Optional[str] = 'analysis/ppo_simulation_results.parquet') -> pd.DataFrame:
-
+def ppo_collect_simulation_data(sim_ids: Iterable[int],
+                                save_path: Optional[str] = 'analysis/ppo_simulation_results.parquet') -> pd.DataFrame:
     all_data = []
 
     for sim_id in sim_ids:
@@ -53,11 +52,10 @@ def collect_simulation_data(sim_ids: Iterable[int],
 
 
 if __name__ == '__main__':
-
     debug: bool = True
 
-    sim_ids = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
-    result_df = collect_simulation_data(sim_ids)
+    sim_ids = (1, 2, 3)
+    result_df = ppo_collect_simulation_data(sim_ids)
 
     # Display the first few rows of the DataFrame
     print(result_df.head())

@@ -220,7 +220,7 @@ class ReachingEnvironment:
 
     def step(self,
              action: np.ndarray,
-             abort_criteria: float = 1,  # in [mm]
+             abort_criteria: float = 5,  # in [mm]
              max_angle_change: float = np.radians(5),
              reward_gaussian: bool = True,
              clip_thetas: bool = True):
@@ -237,10 +237,12 @@ class ReachingEnvironment:
         # Calculate reward
         distance = np.linalg.norm(new_pos - self.target_pos)
         # TODO: Try different reward functions
-        reward = linear_reward(error=distance, max_distance=PlanarArms.upper_arm_length + PlanarArms.forearm_length)
+        reward = -1. * distance
         if reward_gaussian:
-            reward += gaussian_reward(error=distance, sigma=15)
+            reward += gaussian_reward(error=distance, sigma=20)
         done = distance < abort_criteria
+        if done:
+            reward += 100.
 
         return np.concatenate([self.current_thetas, self.norm_target_pos]), reward, done
 
@@ -273,7 +275,7 @@ def train_ppo(Agent: PPOAgent,
               num_workers: int = 10,
               buffer_capacity: int = 2000,
               steps_per_worker: int = 200,
-              num_updates: int = 4,
+              num_updates: int = 5,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
     replay_buffer = ExperienceBuffer(buffer_capacity)
