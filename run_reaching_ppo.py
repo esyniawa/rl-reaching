@@ -237,12 +237,12 @@ class ReachingEnvironment:
         # Calculate reward
         distance = np.linalg.norm(new_pos - self.target_pos)
         # TODO: Try different reward functions
-        reward = -1. * distance
+        reward = -1e-3 * distance  # in [m]
         if reward_gaussian:
-            reward += gaussian_reward(error=distance, sigma=20)
+            reward += gaussian_reward(error=distance, sigma=20, amplitude=1.)  # sigma in [mm]
         done = distance < abort_criteria
         if done:
-            reward += 100.
+            reward += 1000.
 
         return np.concatenate([self.current_thetas, self.norm_target_pos]), reward, done
 
@@ -251,17 +251,20 @@ def collect_experience(args):
     Agent, num_steps, init_thetas, target_thetas, target_pos = args
 
     # Set the seed for this worker
-    # seed = torch.seed()
+    torch.seed()
 
     env = ReachingEnvironment(target_thetas=target_thetas, target_pos=target_pos, init_thetas=init_thetas)
     state = env.reset()
     experiences = []
 
+    total_reward = 0
     for _ in range(num_steps):
         action, log_prob = Agent.get_action(state, add_exploration_noise=None, seed=None)
         next_state, reward, done = env.step(action)
         experiences.append((state, action, reward, next_state, done, log_prob))
         state = next_state
+
+        total_reward += reward
         if done:
             break
 
@@ -275,7 +278,7 @@ def train_ppo(Agent: PPOAgent,
               num_workers: int = 10,
               buffer_capacity: int = 2000,
               steps_per_worker: int = 200,
-              num_updates: int = 5,
+              num_updates: int = 2,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
     replay_buffer = ExperienceBuffer(buffer_capacity)
