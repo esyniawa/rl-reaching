@@ -12,7 +12,7 @@ from collections import deque
 import random
 
 from kinematics.planar_arms import PlanarArms
-from utils import safe_save, generate_random_coordinate, norm_xy
+from utils import safe_save, generate_random_coordinate, norm_xy, norm_distance
 from reward_functions_ppo import gaussian_reward, linear_reward, sigmoid_reward, logarithmic_reward
 
 # torch.set_num_threads(4)
@@ -72,7 +72,7 @@ class PPOAgent:
     def __init__(self,
                  input_dim,
                  output_dim,
-                 actor_lr=3e-4, critic_lr=3e-4,
+                 actor_lr=1e-3, critic_lr=1e-3,
                  gamma=0.99, epsilon=0.2,
                  epochs=10, batch_size=128):
 
@@ -90,7 +90,7 @@ class PPOAgent:
             torch.manual_seed(seed)
 
         with torch.no_grad():
-            state = torch.FloatTensor(state)
+            state = torch.FloatTensor(state).unsqueeze(0)
             mean, std = self.actor(state)
 
             # add noise to std to encourage or discourage exploration
@@ -182,21 +182,27 @@ class ReachingEnvironment:
         """
 
         :param target_thetas: target angles in radians
+        :param target_pos: target position in cartesian coordinates [mm]. If None, it will be computed
         :param init_thetas: initial angles in radians
         :param arm: left or right arm
         """
-
+        # parameters
         self.arm = arm
         self.init_thetas = init_thetas
+
+        # current infos
         self.current_thetas = init_thetas.copy()
+        self.current_pos = self.get_position(self.current_thetas)
+
+        # target infos
         self.target_thetas = target_thetas
         if target_pos is None:
-            self.target_pos = PlanarArms.forward_kinematics(arm=self.arm, thetas=self.target_thetas, radians=True)[:, -1]
+            self.target_pos = self.get_position(self.target_thetas)
         else:
             self.target_pos = target_pos
 
-        # normalize target position to [0, 1]
-        self.norm_target_pos = norm_xy(self.target_pos)
+        # distance to target in normalized [-1, 1]
+        self.norm_distance = norm_distance(self.target_pos - self.current_pos)
 
     @staticmethod
     def random_target(init_thetas: np.ndarray):
@@ -205,46 +211,52 @@ class ReachingEnvironment:
 
         return target_thetas, target_pos
 
+    def get_position(self, thetas: np.ndarray, radians: bool = True, check_bounds: bool = True) -> np.ndarray:
+        return PlanarArms.forward_kinematics(arm=self.arm, thetas=thetas, radians=radians, check_limits=check_bounds)[:, -1]
+
     def reset(self):
         self.current_thetas = self.init_thetas.copy()
-        return np.concatenate([self.current_thetas, self.norm_target_pos])
+        self.current_pos = self.get_position(self.current_thetas)
+
+        return np.concatenate([self.current_thetas, norm_distance(self.target_pos - self.current_pos)])
 
     def set_parameters(self,
                        target_thetas: np.ndarray,
                        target_pos: np.ndarray,
                        init_thetas: np.ndarray):
 
-        self.init_thetas, self.current_thetas = init_thetas, init_thetas
-        self.target_thetas, self.target_pos = target_thetas, target_pos
-        self.norm_target_pos = norm_xy(target_pos)
+        self.__init__(arm=self.arm, target_thetas=target_thetas, init_thetas=init_thetas, target_pos=target_pos)
 
     def step(self,
              action: np.ndarray,
-             abort_criteria: float = 5,  # in [mm]
-             max_angle_change: float = np.radians(5),
+             abort_criteria: float = 4,  # in [mm]
+             scale_angle_change: float = np.radians(10),
              reward_gaussian: bool = True,
              clip_thetas: bool = True):
 
+        # Calculate new angles
+        self.current_thetas += action * scale_angle_change
         # clip angles to joint constraints
-        self.current_thetas += action * max_angle_change
         if clip_thetas:
             self.current_thetas = PlanarArms.clip_values(self.current_thetas, radians=True)
 
         # Calculate new position
-        new_pos = PlanarArms.forward_kinematics(self.arm, self.current_thetas,
-                                                radians=True, check_limits=clip_thetas)[:, -1]
+        self.current_pos = self.get_position(self.current_thetas, check_bounds=clip_thetas)
 
-        # Calculate reward
-        distance = np.linalg.norm(new_pos - self.target_pos)
+        # Calculate error + reward
+        distance = self.target_pos - self.current_pos
+        self.norm_distance = norm_distance(distance)
+
+        error = np.linalg.norm(distance)
         # TODO: Try different reward functions
-        reward = -1e-3 * distance  # in [m]
+        reward = -1e-3 * error  # in [m]
         if reward_gaussian:
-            reward += gaussian_reward(error=distance, sigma=20, amplitude=1.)  # sigma in [mm]
-        done = distance < abort_criteria
+            reward += gaussian_reward(error=error, sigma=20, amplitude=1.)  # sigma in [mm]
+        done = error < abort_criteria
         if done:
-            reward += 1000.
+            reward += 1.
 
-        return np.concatenate([self.current_thetas, self.norm_target_pos]), reward, done
+        return np.concatenate([self.current_thetas, self.norm_distance]), reward, done
 
 
 def collect_experience(args):

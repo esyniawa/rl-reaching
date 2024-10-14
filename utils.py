@@ -65,6 +65,26 @@ def norm_xy(xy: np.ndarray,
     return np.array([normalized_x, normalized_y])
 
 
+def norm_distance(distance: np.ndarray,
+                  x_bounds: tuple[float, float] = parameters['x_reaching_space_limits'],
+                  y_bounds: tuple[float, float] = parameters['y_reaching_space_limits'],
+                  clip_borders_xy: float = 10.
+                  ) -> np.ndarray:
+
+    x_bounds = (x_bounds[0] + clip_borders_xy, x_bounds[1] - clip_borders_xy)
+    y_bounds = (y_bounds[0] + clip_borders_xy, y_bounds[1] - clip_borders_xy)
+
+    # Calculate x and y ranges
+    x_range = abs(x_bounds[1] - x_bounds[0])
+    y_range = abs(y_bounds[1] - y_bounds[0])
+
+    # Normalize the distance components to [-1, 1]
+    normalized_dx = distance[0] / x_range
+    normalized_dy = distance[1] / y_range
+
+    return np.array([normalized_dx, normalized_dy])
+
+
 def safe_save(save_name: str, array: np.ndarray) -> None:
     """
     If a folder is specified and does not yet exist, it will be created automatically.
@@ -84,9 +104,15 @@ def safe_save(save_name: str, array: np.ndarray) -> None:
 
 
 if __name__ == '__main__':
+    target_thetas, target_xy = generate_random_coordinate()
+    current_thetas = np.radians((90., 90.))
 
-    for _ in range(100):
-        random_thetas, random_xy = generate_random_coordinate()
+    for _ in range(1000):
+        current_thetas += np.random.normal(loc=0.0, scale=0.1, size=2)
+        current_thetas = PlanarArms.clip_values(current_thetas, radians=True)
+        current_pos = PlanarArms.forward_kinematics(arm=parameters['moving_arm'],
+                                                    thetas=current_thetas,
+                                                    radians=True)[:, -1]
+        distance = target_xy - current_pos
 
-        norm = norm_xy(random_xy)
-        print(random_xy, norm)
+        print(norm_distance(distance), distance)
