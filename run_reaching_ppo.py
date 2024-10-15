@@ -72,9 +72,9 @@ class PPOAgent:
     def __init__(self,
                  input_dim,
                  output_dim,
-                 actor_lr=1e-3, critic_lr=1e-3,
+                 actor_lr=3e-4, critic_lr=3e-4,
                  gamma=0.99, epsilon=0.2,
-                 epochs=10, batch_size=128):
+                 epochs=10, batch_size=256):
 
         self.actor = ActorNetwork(input_dim, output_dim)
         self.critic = CriticNetwork(input_dim)
@@ -230,7 +230,7 @@ class ReachingEnvironment:
     def step(self,
              action: np.ndarray,
              abort_criteria: float = 4,  # in [mm]
-             scale_angle_change: float = np.radians(10),
+             scale_angle_change: float = np.radians(5),
              reward_gaussian: bool = True,
              clip_thetas: bool = True):
 
@@ -254,7 +254,7 @@ class ReachingEnvironment:
             reward += gaussian_reward(error=error, sigma=20, amplitude=1.)  # sigma in [mm]
         done = error < abort_criteria
         if done:
-            reward += 1.
+            reward += 10.
 
         return np.concatenate([self.current_thetas, self.norm_distance]), reward, done
 
@@ -288,9 +288,9 @@ def collect_experience(args):
 def train_ppo(Agent: PPOAgent,
               num_reaching_trials: int,
               num_workers: int = 10,
-              buffer_capacity: int = 2000,
-              steps_per_worker: int = 200,
-              num_updates: int = 2,
+              buffer_capacity: int = 4000,
+              steps_per_worker: int = 400,
+              num_updates: int = 5,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
     replay_buffer = ExperienceBuffer(buffer_capacity)
@@ -322,7 +322,7 @@ def train_ppo(Agent: PPOAgent,
 def test_ppo(Agent: PPOAgent,
              num_reaching_trials: int,
              init_thetas: np.ndarray = np.radians((90, 90)),
-             max_steps: int = 200,  # beware the actions are clipped
+             max_steps: int = 400,  # beware the actions are clipped
              ) -> dict:
 
     target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
@@ -396,7 +396,7 @@ if __name__ == "__main__":
     test_trials = sim_args.num_testing_trials
 
     # initialize agent
-    state_dim = 4  # Current joint angles (2) + target position (2)
+    state_dim = 4  # Current joint angles (2) + cartesian error to target position (2)
     action_dim = 2  # Changes in joint angles
     agent = PPOAgent(input_dim=state_dim, output_dim=action_dim)
 
