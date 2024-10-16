@@ -26,12 +26,17 @@ def ppo_plot_error(sim_ids: Iterable[int],
     reward_stats.columns = ['n_training_trials', 'mean_reward', 'sem_reward']
     error_stats = error_stats.merge(reward_stats, on='n_training_trials')
 
+    # Calculate mean steps and standard error for each n_training_trials, aggregated across all simulations
+    steps_stats = df.groupby('n_training_trials')['steps'].agg(['mean', 'sem']).reset_index()
+    steps_stats.columns = ['n_training_trials', 'mean_steps', 'sem_steps']
+    error_stats = error_stats.merge(steps_stats, on='n_training_trials')
+
     # Calculate the upper and lower bounds for the error range
     error_stats['lower_bound'] = error_stats['mean_error'] - error_stats['sem_error']
     error_stats['upper_bound'] = error_stats['mean_error'] + error_stats['sem_error']
 
     # Create the plot
-    fig, axs = plt.subplots(nrows=2, figsize=(10, 6))
+    fig, axs = plt.subplots(nrows=3, figsize=(10, 6))
 
     # Plot the mean line
     axs[0].plot(error_stats['n_training_trials'], error_stats['mean_error'], 'b-', label='Mean Error')
@@ -58,6 +63,15 @@ def ppo_plot_error(sim_ids: Iterable[int],
     axs[1].set_xlabel('Number of Training Trials')
     axs[1].set_ylabel('Mean Reward')
     axs[1].legend()
+
+    axs[2].plot(error_stats['n_training_trials'], error_stats['mean_steps'], 'g-', label='Mean Steps')
+    axs[2].fill_between(error_stats['n_training_trials'], error_stats['mean_steps'] - error_stats['sem_steps'],
+                        error_stats['mean_steps'] + error_stats['sem_steps'], color='g',
+                        alpha=0.3, label='Standard Error Range')
+    axs[2].set_xticks(df['n_training_trials'].unique())
+    axs[2].set_xlabel('Number of Training Trials')
+    axs[2].set_ylabel('Mean Steps')
+    axs[2].legend()
 
     plt.tight_layout()
 

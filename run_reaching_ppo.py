@@ -50,31 +50,33 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class ActorNetwork(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_layer_size=128):
+    def __init__(self, input_dim, output_dim, hidden_layer_size=64):
         super(ActorNetwork, self).__init__()
         self.shared = nn.Sequential(
-            nn.Linear(input_dim, hidden_layer_size),
+            layer_init(nn.Linear(input_dim, hidden_layer_size)),
             nn.Tanh(),
-            nn.Linear(hidden_layer_size, 64),
+            layer_init(nn.Linear(hidden_layer_size, hidden_layer_size)),
             nn.Tanh()
         )
-        self.actor_mean = nn.Linear(64, output_dim)
-        self.actor_std = nn.Linear(64, output_dim)
+        self.actor_mean = nn.Linear(hidden_layer_size, output_dim)
+        self.actor_std = nn.Linear(hidden_layer_size, output_dim)
 
     def forward(self, x):
         shared_output = self.shared(x)
         mean = self.actor_mean(shared_output)
-        std = nn.functional.softplus(self.actor_std(shared_output)) + 1e-6
+        std = nn.functional.softplus(self.actor_std(shared_output)) + 1e-8
         return mean, std
 
 
 class CriticNetwork(nn.Module):
-    def __init__(self, input_dim, hidden_layer_size=128):
+    def __init__(self, input_dim, hidden_layer_size=64):
         super(CriticNetwork, self).__init__()
         self.critic = nn.Sequential(
-            nn.Linear(input_dim, hidden_layer_size),
+            layer_init(nn.Linear(input_dim, hidden_layer_size)),
             nn.Tanh(),
-            nn.Linear(hidden_layer_size, 1)
+            layer_init(nn.Linear(hidden_layer_size, hidden_layer_size)),
+            nn.Tanh(),
+            layer_init(nn.Linear(hidden_layer_size, 1), std=1.0),
         )
 
     def forward(self, x):
@@ -109,7 +111,7 @@ class PPOAgent:
 
             # add noise to std to encourage or discourage exploration
             if add_exploration_noise is not None:
-                std *= torch.abs(torch.randn_like(std))
+                std += torch.abs(torch.normal(mean=0, std=add_exploration_noise, size=std.shape))
 
             dist = Normal(mean, std)
             action = dist.sample()
@@ -118,7 +120,8 @@ class PPOAgent:
 
     def update(self,
                replay_buffer: ExperienceBuffer,
-               normalize_advantages: bool = True):
+               normalize_advantages: bool = True,
+               entropy_coef: float = 0.01) -> None:
 
         if len(replay_buffer) < self.batch_size:
             return
@@ -163,14 +166,17 @@ class PPOAgent:
             # Critic loss
             critic_loss = nn.MSELoss()(self.critic(states), returns.unsqueeze(1))
 
-            # Update actor
-            self.actor_optimizer.zero_grad()
-            actor_loss.backward()
-            self.actor_optimizer.step()
+            # Entropy
+            entropy = dist.entropy().mean()
 
-            # Update critic
+            # Combined loss
+            loss = actor_loss + 0.5 * critic_loss - entropy_coef * entropy
+
+            # Update both actor and critic
+            self.actor_optimizer.zero_grad()
             self.critic_optimizer.zero_grad()
-            critic_loss.backward()
+            loss.backward()
+            self.actor_optimizer.step()
             self.critic_optimizer.step()
 
         # clear buffer after each update because we are on-policy
@@ -313,7 +319,7 @@ def collect_experience(args):
 
         total_reward += reward
         if done:
-            break
+            state = env.reset()
 
     del env
     return experiences
