@@ -36,6 +36,19 @@ class ExperienceBuffer:
         return len(self.buffer)
 
 
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    """
+
+    :param layer:
+    :param std:
+    :param bias_const:
+    :return:
+    """
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
+
+
 class ActorNetwork(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_layer_size=128):
         super(ActorNetwork, self).__init__()
@@ -73,7 +86,7 @@ class PPOAgent:
                  input_dim,
                  output_dim,
                  actor_lr=3e-4, critic_lr=3e-4,
-                 gamma=0.99, epsilon=0.2,
+                 gamma=0.99, gae_lambda=0.95, epsilon=0.2,
                  epochs=10, batch_size=256):
 
         self.actor = ActorNetwork(input_dim, output_dim)
@@ -81,6 +94,7 @@ class PPOAgent:
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=actor_lr)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=critic_lr)
         self.gamma = gamma
+        self.gae_lambda = gae_lambda
         self.epsilon = epsilon
         self.epochs = epochs
         self.batch_size = batch_size
@@ -95,14 +109,17 @@ class PPOAgent:
 
             # add noise to std to encourage or discourage exploration
             if add_exploration_noise is not None:
-                std *= torch.abs(torch.randn_like(std) * add_exploration_noise)
+                std *= torch.abs(torch.randn_like(std))
 
             dist = Normal(mean, std)
             action = dist.sample()
             log_prob = dist.log_prob(action).sum(dim=-1)
         return action.squeeze(0).numpy(), log_prob.squeeze(0).numpy()
 
-    def update(self, replay_buffer: ExperienceBuffer):
+    def update(self,
+               replay_buffer: ExperienceBuffer,
+               normalize_advantages: bool = True):
+
         if len(replay_buffer) < self.batch_size:
             return
 
@@ -119,13 +136,18 @@ class PPOAgent:
 
             # Compute returns and advantages
             with torch.no_grad():
-                next_values = self.critic(next_states)
-                returns = rewards + self.gamma * next_values.squeeze() * (1 - dones)
-                values = self.critic(states)
-                advantages = returns - values.squeeze()
+                next_values = self.critic(next_states).squeeze()
+                values = self.critic(states).squeeze()
 
-            # Normalize advantages
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+            # Compute returns and advantages
+            advantages = self.compute_gae(rewards=rewards,
+                                          values=values,
+                                          next_values=next_values,
+                                          dones=dones)
+            returns = advantages + values
+
+            if normalize_advantages:
+                advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-10)
 
             # Actor loss
             mean, std = self.actor(states)
@@ -153,6 +175,19 @@ class PPOAgent:
 
         # clear buffer after each update because we are on-policy
         replay_buffer.clear()
+
+    def compute_gae(self,
+                    rewards: torch.Tensor,
+                    values: torch.Tensor,
+                    next_values: torch.Tensor,
+                    dones: torch.Tensor):
+        gae = 0
+        advantages = torch.zeros_like(rewards)
+        for t in reversed(range(len(rewards))):
+            delta = rewards[t] + self.gamma * next_values[t] * (1 - dones[t]) - values[t]
+            gae = delta + self.gamma * self.gae_lambda * (1 - dones[t]) * gae
+            advantages[t] = gae
+        return advantages
 
     def save(self, path: str):
         if path[-1] != '/':
@@ -231,7 +266,7 @@ class ReachingEnvironment:
              action: np.ndarray,
              abort_criteria: float = 4,  # in [mm]
              scale_angle_change: float = np.radians(5),
-             reward_gaussian: bool = True,
+             reward_gaussian: bool = False,
              clip_thetas: bool = True):
 
         # Calculate new angles
@@ -251,7 +286,7 @@ class ReachingEnvironment:
         # TODO: Try different reward functions
         reward = -1e-3 * error  # in [m]
         if reward_gaussian:
-            reward += gaussian_reward(error=error, sigma=20, amplitude=1.)  # sigma in [mm]
+            reward += gaussian_reward(error=error, sigma=15, amplitude=1.)  # sigma in [mm]
         done = error < abort_criteria
         if done:
             reward += 10.
@@ -290,7 +325,7 @@ def train_ppo(Agent: PPOAgent,
               num_workers: int = 10,
               buffer_capacity: int = 4000,
               steps_per_worker: int = 400,
-              num_updates: int = 5,
+              num_updates: int = 4,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
     replay_buffer = ExperienceBuffer(buffer_capacity)
