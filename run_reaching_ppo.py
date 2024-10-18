@@ -50,7 +50,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class ActorNetwork(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_layer_size=64):
+    def __init__(self, input_dim, output_dim, hidden_layer_size=128):
         super(ActorNetwork, self).__init__()
         self.shared = nn.Sequential(
             layer_init(nn.Linear(input_dim, hidden_layer_size)),
@@ -69,7 +69,7 @@ class ActorNetwork(nn.Module):
 
 
 class CriticNetwork(nn.Module):
-    def __init__(self, input_dim, hidden_layer_size=64):
+    def __init__(self, input_dim, hidden_layer_size=128):
         super(CriticNetwork, self).__init__()
         self.critic = nn.Sequential(
             layer_init(nn.Linear(input_dim, hidden_layer_size)),
@@ -270,7 +270,7 @@ class ReachingEnvironment:
 
     def step(self,
              action: np.ndarray,
-             abort_criteria: float = 4,  # in [mm]
+             abort_criteria: float = 2,  # in [mm]
              scale_angle_change: float = np.radians(5),
              reward_gaussian: bool = False,
              clip_thetas: bool = True):
@@ -329,9 +329,9 @@ def collect_experience(args):
 def train_ppo(Agent: PPOAgent,
               num_reaching_trials: int,
               num_workers: int = 10,
-              buffer_capacity: int = 4000,
-              steps_per_worker: int = 400,
-              num_updates: int = 4,
+              buffer_capacity: int = 10_000,
+              steps_per_worker: int = 1_000,
+              num_updates: int = 2,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
     replay_buffer = ExperienceBuffer(buffer_capacity)
@@ -363,7 +363,7 @@ def train_ppo(Agent: PPOAgent,
 def test_ppo(Agent: PPOAgent,
              num_reaching_trials: int,
              init_thetas: np.ndarray = np.radians((90, 90)),
-             max_steps: int = 400,  # beware the actions are clipped
+             max_steps: int = 1000,  # beware the actions are clipped
              ) -> dict:
 
     target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
@@ -433,7 +433,7 @@ if __name__ == "__main__":
             os.makedirs(path)
 
     # parameters
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 52_000)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000,)
     test_trials = sim_args.num_testing_trials
 
     # initialize agent
