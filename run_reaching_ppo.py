@@ -328,8 +328,8 @@ def collect_experience(args):
 # Training loop
 def train_ppo(Agent: PPOAgent,
               num_reaching_trials: int,
-              num_workers: int = 6,
-              buffer_capacity: int = 6_000,
+              num_workers: int = 5,
+              buffer_capacity: int = 10_000,
               steps_per_worker: int = 1_000,
               num_updates: int = 2,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
@@ -417,7 +417,7 @@ if __name__ == "__main__":
     sim_args_parser.add_argument('--id', type=int, default=0, help='Simulation ID')
     sim_args_parser.add_argument('--save', type=bool, default=True)
     sim_args_parser.add_argument('--do_plot', type=bool, default=True)
-    sim_args_parser.add_argument('--num_workers', type=int, default=6)
+    sim_args_parser.add_argument('--num_workers', type=int, default=10)
     sim_args_parser.add_argument('--num_testing_trials', type=int, default=100)
     sim_args = sim_args_parser.parse_args()
 
