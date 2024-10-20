@@ -55,11 +55,11 @@ class ActorNetwork(nn.Module):
         self.shared = nn.Sequential(
             layer_init(nn.Linear(input_dim, hidden_layer_size)),
             nn.Tanh(),
-            layer_init(nn.Linear(hidden_layer_size, hidden_layer_size)),
+            layer_init(nn.Linear(hidden_layer_size, 64)),
             nn.Tanh()
         )
-        self.actor_mean = nn.Linear(hidden_layer_size, output_dim)
-        self.actor_std = nn.Linear(hidden_layer_size, output_dim)
+        self.actor_mean = nn.Linear(64, output_dim)
+        self.actor_std = nn.Linear(64, output_dim)
 
     def forward(self, x):
         shared_output = self.shared(x)
@@ -74,9 +74,9 @@ class CriticNetwork(nn.Module):
         self.critic = nn.Sequential(
             layer_init(nn.Linear(input_dim, hidden_layer_size)),
             nn.Tanh(),
-            layer_init(nn.Linear(hidden_layer_size, hidden_layer_size)),
+            layer_init(nn.Linear(hidden_layer_size, 64)),
             nn.Tanh(),
-            layer_init(nn.Linear(hidden_layer_size, 1), std=1.0),
+            layer_init(nn.Linear(64, 1), std=1.0),
         )
 
     def forward(self, x):
