@@ -89,7 +89,7 @@ class PPOAgent:
                  output_dim,
                  actor_lr=3e-4, critic_lr=3e-4,
                  gamma=0.99, gae_lambda=0.95, epsilon=0.2,
-                 epochs=10, batch_size=256):
+                 epochs=15, batch_size=256):
 
         self.actor = ActorNetwork(input_dim, output_dim)
         self.critic = CriticNetwork(input_dim)
@@ -328,8 +328,8 @@ def collect_experience(args):
 # Training loop
 def train_ppo(Agent: PPOAgent,
               num_reaching_trials: int,
-              num_workers: int = 10,
-              buffer_capacity: int = 10_000,
+              num_workers: int = 6,
+              buffer_capacity: int = 6_000,
               steps_per_worker: int = 1_000,
               num_updates: int = 2,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
@@ -363,7 +363,7 @@ def train_ppo(Agent: PPOAgent,
 def test_ppo(Agent: PPOAgent,
              num_reaching_trials: int,
              init_thetas: np.ndarray = np.radians((90, 90)),
-             max_steps: int = 1000,  # beware the actions are clipped
+             max_steps: int = 1_000,  # beware the actions are clipped
              ) -> dict:
 
     target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
@@ -417,7 +417,7 @@ if __name__ == "__main__":
     sim_args_parser.add_argument('--id', type=int, default=0, help='Simulation ID')
     sim_args_parser.add_argument('--save', type=bool, default=True)
     sim_args_parser.add_argument('--do_plot', type=bool, default=True)
-    sim_args_parser.add_argument('--num_workers', type=int, default=10)
+    sim_args_parser.add_argument('--num_workers', type=int, default=6)
     sim_args_parser.add_argument('--num_testing_trials', type=int, default=100)
     sim_args = sim_args_parser.parse_args()
 
@@ -433,7 +433,7 @@ if __name__ == "__main__":
             os.makedirs(path)
 
     # parameters
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000,)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 52_000)
     test_trials = sim_args.num_testing_trials
 
     # initialize agent
