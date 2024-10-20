@@ -328,10 +328,10 @@ def collect_experience(args):
 # Training loop
 def train_ppo(Agent: PPOAgent,
               num_reaching_trials: int,
-              num_workers: int = 5,
+              num_workers: int = 10,
               buffer_capacity: int = 10_000,
               steps_per_worker: int = 1_000,
-              num_updates: int = 2,
+              num_updates: int = 1,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
     replay_buffer = ExperienceBuffer(buffer_capacity)
