@@ -77,6 +77,11 @@ class PlanarArms:
         return angles if radians else np.degrees(angles)
 
     @staticmethod
+    def get_bounds():
+        return (np.array((PlanarArms.l_upper_arm_limit, PlanarArms.l_forearm_limit)),
+                np.array((PlanarArms.u_upper_arm_limit, PlanarArms.u_forearm_limit)))
+
+    @staticmethod
     def __circular_wrap(x: float, x_min: int | float, x_max: int | float):
         # Calculate the range of the interval
         interval_range = x_max - x_min

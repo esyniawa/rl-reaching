@@ -302,7 +302,10 @@ class ReachingEnvironment:
                                self.norm_distance]), reward, done
 
 
-def collect_experience(args, add_exploratory_noise: float | None = 0.1):
+def collect_experience(args,
+                       add_exploratory_noise: float | None = 0.1,
+                       reset_if_reached_bounds: bool = True):
+
     Agent, num_steps, init_thetas, target_thetas, target_pos, = args
 
     # Set the seed for this worker
@@ -312,18 +315,23 @@ def collect_experience(args, add_exploratory_noise: float | None = 0.1):
     state = env.reset()
     experiences = []
 
-    total_reward = 0
+    if reset_if_reached_bounds:
+        l_bounds, u_bounds = PlanarArms.get_bounds()
+
     for _ in range(num_steps):
         action, log_prob = Agent.get_action(state, seed=None)
         if add_exploratory_noise is not None:
             action += np.random.normal(scale=add_exploratory_noise, size=action.shape)
-        next_state, reward, done = env.step(action)
+        next_state, reward, done = env.step(action, clip_thetas=True)
         experiences.append((state, action, reward, next_state, done, log_prob))
         state = next_state
 
-        total_reward += reward
         if done:
             state = env.reset()
+
+        if reset_if_reached_bounds:
+            if np.all(env.current_thetas == l_bounds) or np.all(env.current_thetas == u_bounds):
+                state = env.reset()
 
     del env
     return experiences
