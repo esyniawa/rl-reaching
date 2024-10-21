@@ -10,6 +10,8 @@ import warnings
 from multiprocessing import Pool
 from collections import deque
 import random
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
 from kinematics.planar_arms import PlanarArms
 from utils import safe_save, generate_random_coordinate, norm_xy, norm_distance
@@ -89,7 +91,7 @@ class PPOAgent:
                  output_dim,
                  actor_lr=3e-4, critic_lr=3e-4,
                  gamma=0.99, gae_lambda=0.95, epsilon=0.2,
-                 epochs=15, batch_size=256):
+                 epochs=10, batch_size=256):
 
         self.actor = ActorNetwork(input_dim, output_dim)
         self.critic = CriticNetwork(input_dim)
@@ -312,7 +314,7 @@ def collect_experience(args):
 
     total_reward = 0
     for _ in range(num_steps):
-        action, log_prob = Agent.get_action(state, add_exploration_noise=None, seed=None)
+        action, log_prob = Agent.get_action(state, add_exploration_noise=0.2, seed=None)
         next_state, reward, done = env.step(action)
         experiences.append((state, action, reward, next_state, done, log_prob))
         state = next_state
@@ -331,7 +333,7 @@ def train_ppo(Agent: PPOAgent,
               num_workers: int = 10,
               buffer_capacity: int = 10_000,
               steps_per_worker: int = 1_000,
-              num_updates: int = 1,
+              num_updates: int = 2,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
     replay_buffer = ExperienceBuffer(buffer_capacity)
@@ -410,6 +412,80 @@ def test_ppo(Agent: PPOAgent,
         ReachEnv.set_parameters(target_thetas=target_thetas, target_pos=target_pos, init_thetas=init_thetas)
 
     return test_results
+
+def render_reaching(PPOAgent: PPOAgent,
+                    init_thetas: np.ndarray = np.radians((90, 90)),
+                    max_steps: int = 1_000,
+                    fps: int = 50,
+                    save_path: str | None = None):
+    """
+    Make a video of the reaching task
+
+    :param PPOAgent: Trained PPOAgent
+    :param init_thetas: initial joint angles (start position)
+    :param max_steps: maximum number of steps the agent can take
+    :param fps: frame per second of the video
+    :param save_path: Save video to this path. If none, the video will be displayed and not saved!
+    :return:
+    """
+    # Initialize environment
+    target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
+    env = ReachingEnvironment(init_thetas=init_thetas, target_thetas=target_thetas, target_pos=target_pos)
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.set_xlim(PlanarArms.x_limits)
+    ax.set_ylim(PlanarArms.y_limits)
+    ax.set_aspect('equal')
+    ax.grid(True)
+
+    # Initialize lines for arm segments and target
+    line, = ax.plot([], [], 'bo-', lw=2)
+    target, = ax.plot(target_pos[0], target_pos[1], 'r*', markersize=10, linestyle=None)
+
+    # Text for step count and error
+    step_text = ax.text(0.02, 0.95, '', transform=ax.transAxes)
+    error_text = ax.text(0.02, 0.90, '', transform=ax.transAxes)
+
+    def init():
+        line.set_data([], [])
+        target.set_data([], [])
+        step_text.set_text('')
+        error_text.set_text('')
+        return line, target, step_text, error_text
+
+    def animate(i):
+        if i == 0:
+            global state
+            state = env.reset()
+        else:
+            action, _ = PPOAgent.get_action(state)
+            state, _, done = env.step(action)
+            if done:
+                return line, target, step_text, error_text
+
+        # Get current arm position
+        arm_positions = PlanarArms.forward_kinematics(arm=env.arm, thetas=env.current_thetas, radians=True)
+        x_coords = list(arm_positions[0])
+        y_coords = list(arm_positions[1])
+
+        line.set_data(x_coords, y_coords)
+        target.set_data(env.target_pos[0], env.target_pos[1])
+
+        error = np.linalg.norm(env.target_pos - env.current_pos)
+        step_text.set_text(f'Step: {i}')
+        error_text.set_text(f'Error: {error:.2f} mm')
+
+        return line, target, step_text, error_text
+
+    anim = animation.FuncAnimation(fig, animate, init_func=init, frames=max_steps,
+                                   interval=fps, blit=True)
+
+    if save_path:
+        anim.save(save_path, writer='ffmpeg', fps=30)
+    else:
+        plt.show()
+
+    plt.close(fig)
 
 
 if __name__ == "__main__":

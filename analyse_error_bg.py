@@ -56,5 +56,5 @@ def plot_error(sim_ids: Iterable[int],
 
 if __name__ == '__main__':
 
-    sim_ids = (1, 2, 3, 4)
+    sim_ids = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     plot_error(sim_ids)

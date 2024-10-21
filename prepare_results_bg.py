@@ -31,18 +31,15 @@ def collect_simulation_data(sim_ids: Iterable[int],
                     'n_training_trials': n_training_trials,
                     'test_trial': test_trial,
                 }
+
                 for key in data.keys():
-                    if key in ['init_angle', 'allow_pickle']:
-                        row_data[key] = data[key]
-                    else:
-                        row_data[key] = data[key][test_trial]
+                   row_data[key] = data[key][test_trial]
 
                 # Append the dictionary to the list
                 all_data.append(row_data)
 
     # Create DataFrame from all collected data
     df = pd.DataFrame(all_data)
-    df.drop(columns=['allow_pickle'], inplace=True)
 
     if save_path is not None:
         folder = os.path.dirname(save_path)
@@ -57,7 +54,7 @@ if __name__ == '__main__':
 
     debug: bool = True
 
-    sim_ids = (1, 2, 3, 4)
+    sim_ids = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
     result_df = collect_simulation_data(sim_ids)
 
     # Display the first few rows of the DataFrame
