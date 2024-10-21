@@ -103,17 +103,13 @@ class PPOAgent:
         self.epochs = epochs
         self.batch_size = batch_size
 
-    def get_action(self, state, seed: int | None = None, add_exploration_noise: float | None = None):
+    def get_action(self, state, seed: int | None = None):
         if seed is not None:
             torch.manual_seed(seed)
 
         with torch.no_grad():
             state = torch.FloatTensor(state).unsqueeze(0)
             mean, std = self.actor(state)
-
-            # add noise to std to encourage or discourage exploration
-            if add_exploration_noise is not None:
-                std += torch.abs(torch.normal(mean=0, std=add_exploration_noise, size=std.shape))
 
             dist = Normal(mean, std)
             action = dist.sample()
@@ -261,7 +257,9 @@ class ReachingEnvironment:
         self.current_thetas = self.init_thetas.copy()
         self.current_pos = self.get_position(self.current_thetas)
 
-        return np.concatenate([self.current_thetas, norm_distance(self.target_pos - self.current_pos)])
+        return np.concatenate([np.sin(self.current_thetas),
+                               np.cos(self.current_thetas),
+                               norm_distance(self.target_pos - self.current_pos)])
 
     def set_parameters(self,
                        target_thetas: np.ndarray,
@@ -299,11 +297,13 @@ class ReachingEnvironment:
         if done:
             reward += 10.
 
-        return np.concatenate([self.current_thetas, self.norm_distance]), reward, done
+        return np.concatenate([np.sin(self.current_thetas),
+                               np.cos(self.current_thetas),
+                               self.norm_distance]), reward, done
 
 
-def collect_experience(args):
-    Agent, num_steps, init_thetas, target_thetas, target_pos = args
+def collect_experience(args, add_exploratory_noise: float | None = 0.1):
+    Agent, num_steps, init_thetas, target_thetas, target_pos, = args
 
     # Set the seed for this worker
     torch.seed()
@@ -314,7 +314,9 @@ def collect_experience(args):
 
     total_reward = 0
     for _ in range(num_steps):
-        action, log_prob = Agent.get_action(state, add_exploration_noise=0.2, seed=None)
+        action, log_prob = Agent.get_action(state, seed=None)
+        if add_exploratory_noise is not None:
+            action += np.random.normal(scale=add_exploratory_noise, size=action.shape)
         next_state, reward, done = env.step(action)
         experiences.append((state, action, reward, next_state, done, log_prob))
         state = next_state
@@ -412,6 +414,7 @@ def test_ppo(Agent: PPOAgent,
         ReachEnv.set_parameters(target_thetas=target_thetas, target_pos=target_pos, init_thetas=init_thetas)
 
     return test_results
+
 
 def render_reaching(PPOAgent: PPOAgent,
                     init_thetas: np.ndarray = np.radians((90, 90)),
@@ -513,7 +516,7 @@ if __name__ == "__main__":
     test_trials = sim_args.num_testing_trials
 
     # initialize agent
-    state_dim = 4  # Current joint angles (2) + cartesian error to target position (2)
+    state_dim = 6  # Current joint angles (4) + cartesian error to target position (2)
     action_dim = 2  # Changes in joint angles
     agent = PPOAgent(input_dim=state_dim, output_dim=action_dim)
 
