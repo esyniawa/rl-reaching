@@ -91,7 +91,7 @@ class PPOAgent:
                  output_dim,
                  actor_lr=3e-4, critic_lr=3e-4,
                  gamma=0.99, gae_lambda=0.95, epsilon=0.2,
-                 epochs=15, batch_size=128):
+                 epochs=10, batch_size=256):
 
         self.actor = ActorNetwork(input_dim, output_dim)
         self.critic = CriticNetwork(input_dim)
@@ -270,9 +270,9 @@ class ReachingEnvironment:
 
     def step(self,
              action: np.ndarray,
-             abort_criteria: float = 4,  # in [mm]
+             abort_criteria: float = 2.5,  # in [mm]
              scale_angle_change: float = np.radians(5),
-             reward_gaussian: bool = True,
+             reward_gaussian: bool = False,
              clip_thetas: bool = True,
              clip_penalty: bool = True):
 
@@ -349,9 +349,9 @@ def collect_experience(args,
 def train_ppo(Agent: PPOAgent,
               num_reaching_trials: int,
               num_workers: int = 10,
-              buffer_capacity: int = 5_000,
-              steps_per_worker: int = 500,
-              num_updates: int = 5,
+              buffer_capacity: int = 10_000,
+              steps_per_worker: int = 1_000,
+              num_updates: int = 2,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
     replay_buffer = ExperienceBuffer(buffer_capacity)
@@ -528,7 +528,7 @@ if __name__ == "__main__":
             os.makedirs(path)
 
     # parameters
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 52_000)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000)
     test_trials = sim_args.num_testing_trials
 
     # initialize agent
