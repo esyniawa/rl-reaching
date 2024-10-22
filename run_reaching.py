@@ -30,8 +30,7 @@ if __name__ == '__main__':
         my_arms = None
 
     # init monitors
-    PopMonitor_training = PopMonitor(populations=[SNr, VL, M1, Output_Pop_Shoulder, Output_Pop_Elbow],
-                                     auto_start=False, sampling_rate=100.)
+    PopMonitor_training = None
     PopMonitor_testing = PopMonitor(populations=[PM, S1, StrD1, SNr, VL, M1, Output_Pop_Shoulder, Output_Pop_Elbow],
                                     auto_start=False, sampling_rate=50.)
 

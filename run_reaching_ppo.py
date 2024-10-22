@@ -270,14 +270,22 @@ class ReachingEnvironment:
 
     def step(self,
              action: np.ndarray,
-             abort_criteria: float = 2,  # in [mm]
+             abort_criteria: float = 2.5,  # in [mm]
              scale_angle_change: float = np.radians(5),
-             reward_gaussian: bool = False,
-             clip_thetas: bool = True):
+             reward_gaussian: bool = True,
+             clip_thetas: bool = True,
+             clip_penalty: bool = True):
 
         # Calculate new angles
         self.current_thetas += action * scale_angle_change
-        # clip angles to joint constraints
+        reward = 0.
+        # give penalty if action leads to out of joint bounds
+        if clip_penalty:
+            if self.current_thetas[0] < PlanarArms.l_upper_arm_limit or self.current_thetas[0] > PlanarArms.u_upper_arm_limit:
+                reward -= 5.
+            if self.current_thetas[1] < PlanarArms.l_forearm_limit or self.current_thetas[1] > PlanarArms.u_forearm_limit:
+                reward -= 5.
+
         if clip_thetas:
             self.current_thetas = PlanarArms.clip_values(self.current_thetas, radians=True)
 
@@ -290,9 +298,9 @@ class ReachingEnvironment:
 
         error = np.linalg.norm(distance)
         # TODO: Try different reward functions
-        reward = -1e-3 * error  # in [m]
+        reward += -1e-3 * error  # in [m]
         if reward_gaussian:
-            reward += gaussian_reward(error=error, sigma=15, amplitude=1.)  # sigma in [mm]
+            reward += gaussian_reward(error=error, sigma=10, amplitude=1.)  # sigma in [mm]
         done = error < abort_criteria
         if done:
             reward += 10.
@@ -330,7 +338,7 @@ def collect_experience(args,
             state = env.reset()
 
         if reset_if_reached_bounds:
-            if np.all(env.current_thetas == l_bounds) or np.all(env.current_thetas == u_bounds):
+            if np.all(env.current_thetas <= l_bounds) or np.all(env.current_thetas >= u_bounds):
                 state = env.reset()
 
     del env
@@ -343,7 +351,7 @@ def train_ppo(Agent: PPOAgent,
               num_workers: int = 10,
               buffer_capacity: int = 10_000,
               steps_per_worker: int = 1_000,
-              num_updates: int = 2,
+              num_updates: int = 4,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
     replay_buffer = ExperienceBuffer(buffer_capacity)
