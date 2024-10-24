@@ -31,7 +31,7 @@ if __name__ == '__main__':
     exp_args = exp_parser.parse_args()
 
     sim_id = exp_args.id
-    sim_time = 50
+    sim_time = 100
 
     # init angle of arms
     init_angle = np.array((90, 90))
@@ -45,22 +45,27 @@ if __name__ == '__main__':
     folder = f'gain_model_{sim_id}/'
     ann.compile('annarchy/' + folder, clean=exp_args.clean)
 
-    gain_signals = (1.0, 1.2, 1.5, 2.0, 3.0)
-    alpha_values = scale_array(gain_signals, 0.2, 0.9)
+    gain_signals = np.arange(0.5, 1.51, 0.25)
+    alpha_values = scale_array(gain_signals, 0.2, 1.0)
     check_gain(gain_signals=gain_signals,
                init_thetas=init_angle, sim_time=sim_time,
                target=target_angle, target_angle=True,
                pop_monitor=pops_monitor_test,
                save_path='results/' + folder)
 
-    fig, axs = plt.subplots(ncols=2, figsize=(8, 3), sharey=True)
+    fig, axs = plt.subplots(ncols=2, figsize=(10, 4), sharey=True)
+    plt.subplots_adjust(wspace=0)  # Set horizontal spacing to 0
     for scale, alpha in zip(gain_signals, alpha_values):
         dict = pops_monitor_test.load(folder='results/' + folder + f'gain_scale{scale}/')
-        axs[0].plot(dict['r_M1'][-1, :, 0], label=f'D1 scale = {scale}', color='orange', linewidth=2, alpha=alpha)
-        axs[1].plot(dict['r_M1'][-1, :, 1], label=f'D1 scale = {scale}', color='blue', linewidth=2, alpha=alpha)
+        axs[0].plot(dict['r_M1'][-1, :, 0], label=f'D1 scale = {round(scale, 2)}', color='orange', linewidth=2, alpha=alpha)
+        axs[1].plot(dict['r_M1'][-1, :, 1], label=f'D1 scale = {round(scale, 2)}', color='blue', linewidth=2, alpha=alpha)
 
-    axs[0].set_xlabel('Neuron $\\theta_{shoulder}$', fontsize=12), axs[1].set_xlabel('Neuron $\\theta_{elbow}$', fontsize=12)
-    axs[0].set_ylabel('r', fontsize=12), axs[1].set_ylabel('r', fontsize=12)
+    axs[0].set_xlabel('Neuron $\\theta_{shoulder}$ in [°]', fontsize=12), axs[1].set_xlabel('Neuron $\\theta_{elbow}$', fontsize=12)
+    axs[0].set_ylabel('r', fontsize=12)
+
+    xlabels = [ang if i % 2 == 0 else None for i, ang in enumerate(parameters['motor_orientations'])]
+    axs[0].set_xticks(np.arange(0, parameters['dim_motor'][0]), xlabels)
+    axs[1].set_xticks(np.arange(0, parameters['dim_motor'][0]), xlabels),
     axs[0].xaxis.set_label_position('top'), axs[1].xaxis.set_label_position('top')
 
     axs[0].legend(), axs[1].legend()
@@ -70,3 +75,5 @@ if __name__ == '__main__':
         plt.show()
 
     plt.close(fig)
+
+

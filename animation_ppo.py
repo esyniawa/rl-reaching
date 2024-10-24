@@ -12,13 +12,13 @@ if __name__ == '__main__':
         n_training_trials = int(folder_name.split('_')[1])
 
         # initialize agent
-        state_dim = 4  # Current joint angles (2) + cartesian error to target position (2)
+        state_dim = 6  # Current joint angles (2) + cartesian error to target position (2)
         action_dim = 2  # Changes in joint angles
         agent = PPOAgent(input_dim=state_dim, output_dim=action_dim)
         agent.load(file_path)
 
         render_reaching(PPOAgent=agent,
                         init_thetas=np.radians((90, 90)),
-                        max_steps=1000,
-                        fps=30,
+                        max_steps=100,
+                        fps=200,
                         save_path=f'analysis/ppo_ntrain[{n_training_trials}]_animation.mp4')
