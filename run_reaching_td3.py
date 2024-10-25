@@ -21,35 +21,19 @@ from reward_functions_ppo import gaussian_reward, linear_reward, sigmoid_reward,
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
-class ExperienceBuffer:
-    def __init__(self, capacity: int):
+class ReplayBuffer:
+    def __init__(self, capacity):
         self.buffer = deque(maxlen=capacity)
 
-    def push(self, state, action, reward, next_state, done, log_prob):
-        self.buffer.append((state, action, reward, next_state, done, log_prob))
+    def push(self, state, action, reward, next_state, done):
+        self.buffer.append((state, action, reward, next_state, done))
 
-    def sample(self, batch_size: int) -> List:
-        return random.sample(self.buffer, batch_size)
-
-    def clear(self):
-        self.buffer.clear()
+    def sample(self, batch_size):
+        batch = random.sample(self.buffer, batch_size)
+        return zip(*batch)
 
     def __len__(self):
         return len(self.buffer)
-
-
-def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
-    """
-    From "Exact solutions to the nonlinear dynamics of learning in deep linear neural networks" - Saxe, A. et al. (2013).
-
-    :param layer:
-    :param std:
-    :param bias_const:
-    :return:
-    """
-    torch.nn.init.orthogonal_(layer.weight, std)
-    torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
 
 
 class ActorNetwork(nn.Module):
@@ -97,7 +81,7 @@ class PPOAgent:
                  output_dim,
                  actor_lr=3e-4, critic_lr=3e-4,
                  gamma=0.99, gae_lambda=0.95, epsilon=0.2,
-                 epochs=10, batch_size=128):
+                 epochs=10, batch_size=256):
 
         self.actor = ActorNetwork(input_dim, output_dim)
         self.critic = CriticNetwork(input_dim)
@@ -352,38 +336,29 @@ def collect_experience(args,
 
 
 # Training loop
-def train_ppo(Agent: PPOAgent,
-              num_reaching_trials: int,
-              num_workers: int = 10,
-              buffer_capacity: int = 5_000,
-              steps_per_worker: int = 500,
-              num_updates: int = 1,
-              init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
-
-    replay_buffer = ExperienceBuffer(buffer_capacity)
-    pool = Pool(num_workers)
+def train_td3(agent, num_reaching_trials, buffer_capacity=1_000_000, batch_size=256):
+    replay_buffer = ReplayBuffer(buffer_capacity)
+    env = ReachingEnvironment(...)
 
     for trial in range(num_reaching_trials):
-        # Initialize target for the environment
-        target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
+        state = env.reset()
+        done = False
 
-        # Collect experiences using multiple workers
-        worker_args = [(Agent, steps_per_worker, init_thetas, target_thetas, target_pos) for _ in range(num_workers)]
-        worker_experiences = pool.map(collect_experience, worker_args)
+        while not done:
+            # Select action with noise for exploration
+            action = agent.get_action(state, add_noise=True)
 
-        # Add experiences to the replay buffer
-        for _ in range(num_updates):
-            for experiences in worker_experiences:
-                for exp in experiences:
-                    replay_buffer.push(*exp)
-            Agent.update(replay_buffer)
+            # Step environment
+            next_state, reward, done = env.step(action)
 
-        # New initial angles are the current target angles
-        init_thetas = target_thetas
+            # Store transition
+            replay_buffer.push(state, action, reward, next_state, done)
 
-    del pool
+            # Update agent if enough samples
+            if len(replay_buffer) > batch_size:
+                agent.update(replay_buffer, batch_size)
 
-    return Agent
+            state = next_state
 
 
 def test_ppo(Agent: PPOAgent,
@@ -438,79 +413,6 @@ def test_ppo(Agent: PPOAgent,
     return test_results
 
 
-def render_reaching(PPOAgent: PPOAgent,
-                    init_thetas: np.ndarray = np.radians((90, 90)),
-                    max_steps: int = 500,
-                    fps: int = 50,
-                    save_path: str | None = None):
-    """
-    Make a video of the reaching task
-
-    :param PPOAgent: Trained PPOAgent
-    :param init_thetas: initial joint angles (start position)
-    :param max_steps: maximum number of steps the agent can take
-    :param fps: frame per second of the video
-    :param save_path: Save video to this path. If none, the video will be displayed and not saved!
-    :return:
-    """
-    # Initialize environment
-    target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
-    env = ReachingEnvironment(init_thetas=init_thetas, target_thetas=target_thetas, target_pos=target_pos)
-
-    fig, ax = plt.subplots(figsize=(8, 8))
-    ax.set_xlim(PlanarArms.x_limits)
-    ax.set_ylim(PlanarArms.y_limits)
-    ax.set_aspect('equal')
-    ax.grid(True)
-
-    # Initialize lines for arm segments and target
-    line, = ax.plot([], [], 'bo-', lw=2)
-    target, = ax.plot(target_pos[0], target_pos[1], 'r*', markersize=10, linestyle=None)
-
-    # Text for step count and error
-    step_text = ax.text(0.02, 0.95, '', transform=ax.transAxes)
-    error_text = ax.text(0.02, 0.90, '', transform=ax.transAxes)
-
-    def init():
-        line.set_data([], [])
-        target.set_data([], [])
-        step_text.set_text('')
-        error_text.set_text('')
-        return line, target, step_text, error_text
-
-    def animate(i):
-        if i == 0:
-            global state
-            state = env.reset()
-        else:
-            action, _ = PPOAgent.get_action(state)
-            state, _, done = env.step(action)
-            if done:
-                return line, target, step_text, error_text
-
-        # Get current arm position
-        arm_positions = PlanarArms.forward_kinematics(arm=env.arm, thetas=env.current_thetas, radians=True)
-        x_coords = list(arm_positions[0])
-        y_coords = list(arm_positions[1])
-
-        line.set_data(x_coords, y_coords)
-        target.set_data(env.target_pos[0], env.target_pos[1])
-
-        error = np.linalg.norm(env.target_pos - env.current_pos)
-        step_text.set_text(f'Step: {i}')
-        error_text.set_text(f'Error: {error:.2f} mm')
-
-        return line, target, step_text, error_text
-
-    anim = animation.FuncAnimation(fig, animate, init_func=init, frames=max_steps,
-                                   interval=fps, blit=True)
-
-    if save_path:
-        anim.save(save_path, writer='ffmpeg', fps=30)
-    else:
-        plt.show()
-
-    plt.close(fig)
 
 
 if __name__ == "__main__":
