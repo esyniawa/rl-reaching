@@ -381,7 +381,8 @@ def train_ppo(Agent: PPOAgent,
         # New initial angles are the current target angles
         init_thetas = target_thetas
 
-    del pool
+    pool.close()
+    pool.join()
 
     return Agent
 

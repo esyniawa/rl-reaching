@@ -1,9 +1,9 @@
 import os
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.distributions import Beta, Normal
+import torch.nn.functional as F
 import numpy as np
+from copy import deepcopy
 import argparse
 from typing import Tuple, List
 import warnings
@@ -16,6 +16,7 @@ import matplotlib.animation as animation
 from kinematics.planar_arms import PlanarArms
 from utils import safe_save, generate_random_coordinate, norm_xy, norm_distance
 from reward_functions_ppo import gaussian_reward, linear_reward, sigmoid_reward, logarithmic_reward
+from run_reaching_ppo import layer_init
 
 # torch.set_num_threads(4)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -36,169 +37,165 @@ class ReplayBuffer:
         return len(self.buffer)
 
 
-class ActorNetwork(nn.Module):
+class Actor(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_layer_size=128):
-        super(ActorNetwork, self).__init__()
-        self.shared = nn.Sequential(
+        super(Actor, self).__init__()
+        self.net = nn.Sequential(
             layer_init(nn.Linear(input_dim, hidden_layer_size)),
-            nn.Tanh(),
+            nn.ReLU(),
             layer_init(nn.Linear(hidden_layer_size, 64)),
-            nn.Tanh()
-        )
-        # Mean is now bounded by tanh
-        self.actor_mean = nn.Sequential(
+            nn.ReLU(),
             layer_init(nn.Linear(64, output_dim)),
-            nn.Tanh()
+            nn.Tanh()  # Action bounds [-1, 1]
         )
 
-        self.actor_std = nn.Linear(64, output_dim)
-
     def forward(self, x):
-        shared_output = self.shared(x)
-        mean = self.actor_mean(shared_output)
-        std = nn.functional.softplus(self.actor_std(shared_output)) + 1e-8
-        return mean, std
+        return self.net(x)
 
 
-class CriticNetwork(nn.Module):
-    def __init__(self, input_dim, hidden_layer_size=128):
-        super(CriticNetwork, self).__init__()
-        self.critic = nn.Sequential(
-            layer_init(nn.Linear(input_dim, hidden_layer_size)),
-            nn.Tanh(),
+class Critic(nn.Module):
+    def __init__(self, input_dim, action_dim, hidden_layer_size=128):
+        super(Critic, self).__init__()
+        self.net = nn.Sequential(
+            layer_init(nn.Linear(input_dim + action_dim, hidden_layer_size)),
+            nn.ReLU(),
             layer_init(nn.Linear(hidden_layer_size, 64)),
-            nn.Tanh(),
-            layer_init(nn.Linear(64, 1), std=1.0),
+            nn.ReLU(),
+            layer_init(nn.Linear(64, 1))
         )
 
-    def forward(self, x):
-        return self.critic(x)
+    def forward(self, state, action):
+        x = torch.cat([state, action], dim=1)
+        return self.net(x)
 
 
-class PPOAgent:
-    def __init__(self,
-                 input_dim,
-                 output_dim,
-                 actor_lr=3e-4, critic_lr=3e-4,
-                 gamma=0.99, gae_lambda=0.95, epsilon=0.2,
-                 epochs=10, batch_size=256):
+class TD3Agent:
+    def __init__(
+            self,
+            input_dim,
+            output_dim,
+            actor_lr=3e-4, critic_lr=3e-4,
+            gamma=0.99, tau=0.005,
+            policy_noise=0.2, exploration_noise=0.1,
+            noise_clip=0.5, policy_delay=2
+    ):
+        self.actor = Actor(input_dim, output_dim)
+        self.actor_target = deepcopy(self.actor)
 
-        self.actor = ActorNetwork(input_dim, output_dim)
-        self.critic = CriticNetwork(input_dim)
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=actor_lr)
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=critic_lr)
+        self.critic_1 = Critic(input_dim, output_dim)
+        self.critic_2 = Critic(input_dim, output_dim)
+        self.critic_target_1 = deepcopy(self.critic_1)
+        self.critic_target_2 = deepcopy(self.critic_2)
+
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
+        self.critic_optimizer = torch.optim.Adam(
+            list(self.critic_1.parameters()) + list(self.critic_2.parameters()),
+            lr=critic_lr
+        )
+
         self.gamma = gamma
-        self.gae_lambda = gae_lambda
-        self.epsilon = epsilon
-        self.epochs = epochs
-        self.batch_size = batch_size
+        self.tau = tau
+        self.policy_noise = policy_noise
+        self.exploration_noise = exploration_noise
+        self.noise_clip = noise_clip
+        self.policy_delay = policy_delay
+        self.total_it = 0
 
-    def get_action(self, state, seed: int | None = None):
-        if seed is not None:
-            torch.manual_seed(seed)
+        # Action bounds
+        self.max_action = 1
+        self.min_action = -1
 
+    def get_action(self, state, exploration_noise: bool = True):
         with torch.no_grad():
             state = torch.FloatTensor(state).unsqueeze(0)
-            mean, std = self.actor(state)
+            action = self.actor(state).squeeze(0).numpy()
 
-            dist = Normal(mean, std)
-            action = dist.sample()
-            log_prob = dist.log_prob(action).sum(dim=-1)
-        return action.squeeze(0).numpy(), log_prob.squeeze(0).numpy()
+            # Note: Policy smoothing noise is handled separately in the update method
+            # This is only for exploration during data collection
+            if exploration_noise:
+                exploration_noise = np.random.normal(0, self.exploration_noise, size=action.shape)
+                action = np.clip(action + exploration_noise, self.min_action, self.max_action)
 
-    def update(self,
-               replay_buffer: ExperienceBuffer,
-               normalize_advantages: bool = True,
-               entropy_coef: float = 0.01) -> None:
+        return action
 
-        if len(replay_buffer) < self.batch_size:
-            return
+    def update(self, replay_buffer: ReplayBuffer, batch_size: int = 256):
+        self.total_it += 1
 
-        for _ in range(self.epochs):
-            batch = replay_buffer.sample(self.batch_size)
-            states, actions, rewards, next_states, dones, old_log_probs = zip(*batch)
+        # Sample from replay buffer
+        state, action, reward, next_state, done = replay_buffer.sample(batch_size)
 
-            states = torch.FloatTensor(np.array(states))
-            actions = torch.FloatTensor(np.array(actions))
-            old_log_probs = torch.FloatTensor(np.array(old_log_probs))
-            rewards = torch.FloatTensor(rewards)
-            next_states = torch.FloatTensor(np.array(next_states))
-            dones = torch.FloatTensor(dones)
+        state = torch.FloatTensor(np.array(state))
+        action = torch.FloatTensor(np.array(action))
+        reward = torch.FloatTensor(reward).unsqueeze(1)
+        next_state = torch.FloatTensor(np.array(next_state))
+        done = torch.FloatTensor(done).unsqueeze(1)
 
-            # Compute returns and advantages
-            with torch.no_grad():
-                next_values = self.critic(next_states).squeeze()
-                values = self.critic(states).squeeze()
+        with torch.no_grad():
+            # Select action according to policy and add clipped noise
+            noise = (
+                    torch.randn_like(action) * self.policy_noise
+            ).clamp(-self.noise_clip, self.noise_clip)
 
-            # Compute returns and advantages
-            advantages = self.compute_gae(rewards=rewards,
-                                          values=values,
-                                          next_values=next_values,
-                                          dones=dones)
-            returns = advantages + values
+            next_action = (
+                    self.actor_target(next_state) + noise
+            ).clamp(self.min_action, self.max_action)
 
-            if normalize_advantages:
-                advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-10)
+            # Compute the target Q value
+            target_Q1 = self.critic_target_1(next_state, next_action)
+            target_Q2 = self.critic_target_2(next_state, next_action)
+            target_Q = torch.min(target_Q1, target_Q2)
+            target_Q = reward + (1 - done) * self.gamma * target_Q
 
-            # Actor loss
-            mean, std = self.actor(states)
-            dist = Normal(mean, std)
-            new_log_probs = dist.log_prob(actions).sum(dim=-1, keepdim=True)
-            ratio = torch.exp(new_log_probs - old_log_probs.unsqueeze(1))
+        # Get current Q estimates
+        current_Q1 = self.critic_1(state, action)
+        current_Q2 = self.critic_2(state, action)
 
-            surr1 = ratio * advantages.unsqueeze(1)
-            surr2 = torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon) * advantages.unsqueeze(1)
+        # Compute critic loss
+        critic_loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
 
-            actor_loss = -torch.min(surr1, surr2).mean()
+        # Optimize the critic
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        self.critic_optimizer.step()
 
-            # Critic loss
-            critic_loss = nn.MSELoss()(self.critic(states), returns.unsqueeze(1))
+        # Delayed policy updates
+        if self.total_it % self.policy_delay == 0:
+            # Compute actor loss
+            actor_loss = -self.critic_1(state, self.actor(state)).mean()
 
-            # Entropy
-            entropy = dist.entropy().mean()
-
-            # Combined loss
-            loss = actor_loss + 0.5 * critic_loss - entropy_coef * entropy
-
-            # Update both actor and critic
+            # Optimize the actor
             self.actor_optimizer.zero_grad()
-            self.critic_optimizer.zero_grad()
-            loss.backward()
+            actor_loss.backward()
             self.actor_optimizer.step()
-            self.critic_optimizer.step()
 
-        # clear buffer after each update because we are on-policy
-        replay_buffer.clear()
+            # Update the frozen target models
+            for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
-    def compute_gae(self,
-                    rewards: torch.Tensor,
-                    values: torch.Tensor,
-                    next_values: torch.Tensor,
-                    dones: torch.Tensor):
-        gae = 0
-        advantages = torch.zeros_like(rewards)
-        for t in reversed(range(len(rewards))):
-            delta = rewards[t] + self.gamma * next_values[t] * (1 - dones[t]) - values[t]
-            gae = delta + self.gamma * self.gae_lambda * (1 - dones[t]) * gae
-            advantages[t] = gae
-        return advantages
+            for param, target_param in zip(self.critic_1.parameters(), self.critic_target_1.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+
+            for param, target_param in zip(self.critic_2.parameters(), self.critic_target_2.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
     def save(self, path: str):
         if path[-1] != '/':
             path += '/'
 
-        if not os.path.exists(path):
-            os.makedirs(path)
-
         torch.save(self.actor.state_dict(), path + 'actor.pt')
-        torch.save(self.critic.state_dict(), path + 'critic.pt')
+        torch.save(self.critic_1.state_dict(), path + 'critic_1.pt')
+        torch.save(self.critic_2.state_dict(), path + 'critic_2.pt')
 
     def load(self, path: str):
         if path[-1] != '/':
             path += '/'
 
         self.actor.load_state_dict(torch.load(path + 'actor.pt'))
-        self.critic.load_state_dict(torch.load(path + 'critic.pt'))
+        self.actor_target = deepcopy(self.actor)
+        self.critic_1.load_state_dict(torch.load(path + 'critic_1.pt'))
+        self.critic_target_1 = deepcopy(self.critic_1)
+        self.critic_2.load_state_dict(torch.load(path + 'critic_2.pt'))
+        self.critic_target_2 = deepcopy(self.critic_2)
 
 
 # Environment wrapper
@@ -300,73 +297,92 @@ class ReachingEnvironment:
                                self.norm_distance]), reward, done
 
 
-def collect_experience(args,
-                       add_exploratory_noise: float | None = 0.1,
-                       reset_if_reached_bounds: bool = True):
-
-    Agent, num_steps, init_thetas, target_thetas, target_pos, = args
+def collect_experience_td3(args):
+    """
+    Parallel worker for collecting experience with TD3 agent
+    """
+    Agent, num_steps, init_thetas, target_thetas, target_pos = args
 
     # Set the seed for this worker
-    torch.seed()
+    torch.manual_seed(random.randint(0, 1000000))
+    np.random.seed(random.randint(0, 1000000))
 
     env = ReachingEnvironment(target_thetas=target_thetas, target_pos=target_pos, init_thetas=init_thetas)
     state = env.reset()
     experiences = []
 
-    if reset_if_reached_bounds:
-        l_bounds, u_bounds = PlanarArms.get_bounds()
-
     for _ in range(num_steps):
-        action, log_prob = Agent.get_action(state, seed=None)
-        if add_exploratory_noise is not None:
-            action += np.random.normal(scale=add_exploratory_noise, size=action.shape)
-        next_state, reward, done = env.step(action, clip_thetas=True)
-        experiences.append((state, action, reward, next_state, done, log_prob))
-        state = next_state
+        # Get action from agent and add exploration noise
+        action = Agent.get_action(state, exploration_noise=True)
+        next_state, reward, done = env.step(action, clip_thetas=True, clip_penalty=True)
+        experiences.append((state, action, reward, next_state, done))
 
+        state = next_state
         if done:
             state = env.reset()
 
-        if reset_if_reached_bounds:
-            if np.all(env.current_thetas <= l_bounds) or np.all(env.current_thetas >= u_bounds):
-                state = env.reset()
-
-    del env
     return experiences
 
 
-# Training loop
-def train_td3(agent, num_reaching_trials, buffer_capacity=1_000_000, batch_size=256):
-    replay_buffer = ReplayBuffer(buffer_capacity)
-    env = ReachingEnvironment(...)
+def train_td3_parallel(Agent: TD3Agent,
+                       num_reaching_trials: int,
+                       replay_buffer: ReplayBuffer,
+                       num_workers: int = 10,
+                       steps_per_worker: int = 500,
+                       batch_size: int = 256,
+                       num_updates: int = 5,
+                       init_thetas: np.ndarray = np.radians((90, 90))) -> TD3Agent:
+    """
+    Train TD3 agent using parallel workers for experience collection
+    """
+    pool = Pool(num_workers)
 
     for trial in range(num_reaching_trials):
-        state = env.reset()
-        done = False
+        # Initialize target for all environments
+        target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
 
-        while not done:
-            # Select action with noise for exploration
-            action = agent.get_action(state, add_noise=True)
+        # Collect experiences using multiple workers
+        worker_args = [(Agent, steps_per_worker, init_thetas, target_thetas, target_pos)
+                       for _ in range(num_workers)]
+        worker_experiences = pool.map(collect_experience_td3, worker_args)
 
-            # Step environment
-            next_state, reward, done = env.step(action)
+        # Add experiences to replay buffer
+        for experiences in worker_experiences:
+            for exp in experiences:
+                replay_buffer.push(*exp)
 
-            # Store transition
-            replay_buffer.push(state, action, reward, next_state, done)
+        # Perform multiple updates after collecting new experiences
+        if len(replay_buffer) > batch_size:
+            for _ in range(num_updates):
+                Agent.update(replay_buffer, batch_size)
 
-            # Update agent if enough samples
-            if len(replay_buffer) > batch_size:
-                agent.update(replay_buffer, batch_size)
+        # New initial angles are the current target angles
+        init_thetas = target_thetas
 
-            state = next_state
+    pool.close()
+    pool.join()
+
+    return Agent
 
 
-def test_ppo(Agent: PPOAgent,
+def test_td3(Agent: TD3Agent,
              num_reaching_trials: int,
              init_thetas: np.ndarray = np.radians((90, 90)),
-             max_steps: int = 500,  # beware the actions are clipped
+             max_steps: int = 500,
+             render_interval: int | None = None,  # Set to N to render every N trials
+             save_path: str | None = None  # Path to save renderings if render_interval is set
              ) -> dict:
+    """
+    Test TD3 agent's performance on reaching tasks
 
+    Args:
+        Agent: Trained TD3Agent
+        num_reaching_trials: Number of reaching movements to test
+        init_thetas: Initial joint angles
+        max_steps: Maximum steps per trial
+        render_interval: If set, renders every N trials
+        save_path: Path to save rendered trials (if render_interval is set)
+    """
     target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
     ReachEnv = ReachingEnvironment(init_thetas=init_thetas, target_thetas=target_thetas, target_pos=target_pos)
 
@@ -377,42 +393,144 @@ def test_ppo(Agent: PPOAgent,
         'error': [],
         'total_reward': [],
         'steps': [],
+        'trajectories': [],  # Store end-effector trajectories
+        'success_rate': 0.0  # Percentage of successful reaches
     }
 
+    successful_reaches = 0
+
     for trial in range(num_reaching_trials):
-        # initialize target for the environment
         state = ReachEnv.reset()
         episode_reward = 0
+        trajectory = []  # Store positions during this trial
 
         for step in range(max_steps):
-            action, _ = Agent.get_action(state)
+            # Get deterministic action (no exploration noise during testing)
+            action = Agent.get_action(state, exploration_noise=False)
             next_state, reward, done = ReachEnv.step(action)
+
+            # Store current position for trajectory
+            trajectory.append(ReachEnv.current_pos.copy())
 
             state = next_state
             episode_reward += reward
 
             if done:
+                successful_reaches += 1
                 break
 
-        test_results['target_thetas'].append(ReachEnv.target_thetas)
-        test_results['executed_thetas'].append(ReachEnv.current_thetas)
-        test_results['target_pos'].append(ReachEnv.target_pos)
-        test_results['error'].append(
-            np.linalg.norm(ReachEnv.target_pos - PlanarArms.forward_kinematics(arm=ReachEnv.arm,
-                                                                               thetas=ReachEnv.current_thetas,
-                                                                               radians=True,
-                                                                               check_limits=False)[:, -1]))
+        # Store results for this trial
+        test_results['target_thetas'].append(ReachEnv.target_thetas.copy())
+        test_results['executed_thetas'].append(ReachEnv.current_thetas.copy())
+        test_results['target_pos'].append(ReachEnv.target_pos.copy())
+        test_results['trajectories'].append(np.array(trajectory))
+
+        # Calculate final error
+        final_error = np.linalg.norm(ReachEnv.target_pos - ReachEnv.current_pos)
+        test_results['error'].append(final_error)
         test_results['total_reward'].append(episode_reward)
         test_results['steps'].append(step + 1)
 
-        # set new targets
+        # Render if requested
+        if render_interval and trial % render_interval == 0:
+            render_trial(ReachEnv, test_results['trajectories'][-1],
+                         save_path=f"{save_path}/trial_{trial}.png" if save_path else None)
+
+        # Set new targets for next trial
         init_thetas = target_thetas
         target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
         ReachEnv.set_parameters(target_thetas=target_thetas, target_pos=target_pos, init_thetas=init_thetas)
 
+    # Calculate overall success rate
+    test_results['success_rate'] = (successful_reaches / num_reaching_trials) * 100
+
     return test_results
 
 
+def render_trial(env: ReachingEnvironment,
+                 trajectory: np.ndarray,
+                 save_path: str | None = None):
+    """
+    Render a single trial with trajectory
+    """
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.set_xlim(PlanarArms.x_limits)
+    ax.set_ylim(PlanarArms.y_limits)
+    ax.set_aspect('equal')
+    ax.grid(True)
+
+    # Plot trajectory
+    trajectory = np.array(trajectory)
+    ax.plot(trajectory[:, 0], trajectory[:, 1], 'b-', alpha=0.3, label='Trajectory')
+
+    # Plot final arm position
+    arm_positions = PlanarArms.forward_kinematics(arm=env.arm,
+                                                  thetas=env.current_thetas,
+                                                  radians=True)
+    ax.plot(arm_positions[0], arm_positions[1], 'bo-', lw=2, label='Final Position')
+
+    # Plot target
+    ax.plot(env.target_pos[0], env.target_pos[1], 'r*', markersize=10, label='Target')
+
+    # Add legend
+    ax.legend()
+
+    # Add final error text
+    final_error = np.linalg.norm(env.target_pos - env.current_pos)
+    ax.text(0.02, 0.95, f'Final Error: {final_error:.2f} mm',
+            transform=ax.transAxes)
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+    else:
+        plt.show()
+
+
+def analyze_performance(test_results: dict, save_path: str | None = None):
+    """
+    Analyze and visualize test results
+    """
+    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+
+    # Error distribution
+    axs[0, 0].hist(test_results['error'], bins=30)
+    axs[0, 0].set_title('Error Distribution')
+    axs[0, 0].set_xlabel('Error (mm)')
+    axs[0, 0].set_ylabel('Count')
+
+    # Steps to completion
+    axs[0, 1].hist(test_results['steps'], bins=30)
+    axs[0, 1].set_title('Steps to Completion')
+    axs[0, 1].set_xlabel('Steps')
+    axs[0, 1].set_ylabel('Count')
+
+    # Error over trials
+    axs[1, 0].plot(test_results['error'])
+    axs[1, 0].set_title('Error over Trials')
+    axs[1, 0].set_xlabel('Trial')
+    axs[1, 0].set_ylabel('Error (mm)')
+
+    # Reward over trials
+    axs[1, 1].plot(test_results['total_reward'])
+    axs[1, 1].set_title('Reward over Trials')
+    axs[1, 1].set_xlabel('Trial')
+    axs[1, 1].set_ylabel('Total Reward')
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+    else:
+        plt.show()
+
+    # Print summary statistics
+    print("\nPerformance Summary:")
+    print(f"Success Rate: {test_results['success_rate']:.2f}%")
+    print(f"Average Error: {np.mean(test_results['error']):.2f} ± {np.std(test_results['error']):.2f} mm")
+    print(f"Average Steps: {np.mean(test_results['steps']):.2f} ± {np.std(test_results['steps']):.2f}")
+    print(f"Average Reward: {np.mean(test_results['total_reward']):.2f} ± {np.std(test_results['total_reward']):.2f}")
 
 
 if __name__ == "__main__":
@@ -422,6 +540,8 @@ if __name__ == "__main__":
     sim_args_parser.add_argument('--do_plot', type=bool, default=True)
     sim_args_parser.add_argument('--num_workers', type=int, default=10)
     sim_args_parser.add_argument('--num_testing_trials', type=int, default=100)
+    sim_args_parser.add_argument('--buffer_size', type=int, default=100_000)
+    sim_args_parser.add_argument('--batch_size', type=int, default=256)
     sim_args = sim_args_parser.parse_args()
 
     # import matplotlib if the error should be plotted
@@ -429,8 +549,8 @@ if __name__ == "__main__":
         import matplotlib.pyplot as plt
 
     # save path
-    save_path_training = f'results/training_ppo_{sim_args.id}/'
-    save_path_testing = f'results/test_ppo_{sim_args.id}/'
+    save_path_training = f'results/training_td3_{sim_args.id}/'
+    save_path_testing = f'results/test_td3_{sim_args.id}/'
     for path in [save_path_training, save_path_testing]:
         if not os.path.exists(path):
             os.makedirs(path)
@@ -442,32 +562,32 @@ if __name__ == "__main__":
     # initialize agent
     state_dim = 6  # Current joint angles (4) + cartesian error to target position (2)
     action_dim = 2  # Changes in joint angles
-    agent = PPOAgent(input_dim=state_dim, output_dim=action_dim)
+    agent = TD3Agent(input_dim=state_dim, output_dim=action_dim)
 
+    replay_buffer = ReplayBuffer(capacity=sim_args.buffer_size)
     # training loop TODO: make ajustments
     for trials in training_trials:
         print(f'Sim {sim_args.id}: Training for {trials}...')
         subfolder = f'model_{trials}/'
-        agent = train_ppo(agent,
-                          num_reaching_trials=trials,
-                          num_workers=sim_args.num_workers)
+        agent = train_td3_parallel(agent,
+                                   num_reaching_trials=trials,
+                                   replay_buffer=replay_buffer,
+                                   num_workers=sim_args.num_workers,
+                                   batch_size=sim_args.batch_size)
 
         if sim_args.save:
             agent.save(save_path_training + subfolder)
 
         print(f'Sim {sim_args.id}: Testing...')
-        results_dict = test_ppo(agent, num_reaching_trials=test_trials, init_thetas=np.radians((90, 90)))
+        results_dict = test_td3(agent,
+                                num_reaching_trials=test_trials,
+                                init_thetas=np.radians((90, 90)))
+
         if not os.path.exists(save_path_testing + subfolder):
             os.makedirs(save_path_testing + subfolder)
         np.savez(save_path_testing + subfolder + 'results.npz', **results_dict)
 
         if sim_args.do_plot:
-            fig, axs = plt.subplots(nrows=2)
-            axs[0].plot(np.array(results_dict['error']))
-            axs[0].set_title('Error in [mm]')
-            axs[1].plot(np.array(results_dict['total_reward']))
-            axs[1].set_title('Reward')
-            plt.savefig(save_path_testing + subfolder + 'error.pdf', dpi=300, bbox_inches='tight', pad_inches=0)
-            plt.close(fig)
+            analyze_performance(results_dict, save_path=save_path_testing + subfolder + "performance.pdf")
 
     print('Done!')
