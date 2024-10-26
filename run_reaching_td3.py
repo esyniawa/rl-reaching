@@ -569,6 +569,9 @@ if __name__ == "__main__":
     for trials in training_trials:
         print(f'Sim {sim_args.id}: Training for {trials}...')
         subfolder = f'model_{trials}/'
+        if not os.path.exists(save_path_training + subfolder):
+            os.makedirs(save_path_training + subfolder)
+
         agent = train_td3_parallel(agent,
                                    num_reaching_trials=trials,
                                    replay_buffer=replay_buffer,
