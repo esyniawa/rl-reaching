@@ -393,7 +393,6 @@ def test_td3(Agent: TD3Agent,
         'error': [],
         'total_reward': [],
         'steps': [],
-        'trajectories': [],  # Store end-effector trajectories
         'success_rate': 0.0  # Percentage of successful reaches
     }
 
@@ -423,7 +422,6 @@ def test_td3(Agent: TD3Agent,
         test_results['target_thetas'].append(ReachEnv.target_thetas.copy())
         test_results['executed_thetas'].append(ReachEnv.current_thetas.copy())
         test_results['target_pos'].append(ReachEnv.target_pos.copy())
-        test_results['trajectories'].append(np.array(trajectory))
 
         # Calculate final error
         final_error = np.linalg.norm(ReachEnv.target_pos - ReachEnv.current_pos)
@@ -433,7 +431,7 @@ def test_td3(Agent: TD3Agent,
 
         # Render if requested
         if render_interval and trial % render_interval == 0:
-            render_trial(ReachEnv, test_results['trajectories'][-1],
+            render_trial(ReachEnv, trajectory,
                          save_path=f"{save_path}/trial_{trial}.png" if save_path else None)
 
         # Set new targets for next trial
@@ -448,7 +446,7 @@ def test_td3(Agent: TD3Agent,
 
 
 def render_trial(env: ReachingEnvironment,
-                 trajectory: np.ndarray,
+                 trajectory: np.ndarray | list,
                  save_path: str | None = None):
     """
     Render a single trial with trajectory
