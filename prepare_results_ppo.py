@@ -31,10 +31,7 @@ def ppo_collect_simulation_data(sim_ids: Iterable[int],
                     'test_trial': test_trial,
                 }
                 for key in data.keys():
-                    if key in ['init_angle', 'allow_pickle']:
-                        row_data[key] = data[key]
-                    else:
-                        row_data[key] = data[key][test_trial]
+                    row_data[key] = data[key][test_trial]
 
                 # Append the dictionary to the list
                 all_data.append(row_data)
