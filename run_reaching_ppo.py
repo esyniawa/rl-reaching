@@ -57,9 +57,9 @@ class ActorNetwork(nn.Module):
         super(ActorNetwork, self).__init__()
         self.shared = nn.Sequential(
             layer_init(nn.Linear(input_dim, hidden_layer_size)),
-            nn.Tanh(),
+            nn.ReLU(),
             layer_init(nn.Linear(hidden_layer_size, 64)),
-            nn.Tanh()
+            nn.ReLU()
         )
         # Mean is now bounded by tanh
         self.actor_mean = nn.Sequential(
@@ -81,9 +81,9 @@ class CriticNetwork(nn.Module):
         super(CriticNetwork, self).__init__()
         self.critic = nn.Sequential(
             layer_init(nn.Linear(input_dim, hidden_layer_size)),
-            nn.Tanh(),
+            nn.ReLU(),
             layer_init(nn.Linear(hidden_layer_size, 64)),
-            nn.Tanh(),
+            nn.ReLU(),
             layer_init(nn.Linear(64, 1), std=1.0),
         )
 
