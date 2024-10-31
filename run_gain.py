@@ -63,7 +63,7 @@ if __name__ == '__main__':
     axs[0, 0].set_xlabel('Encoding neuron $\\theta_{shoulder}$ in [°]', fontsize=12), axs[0, 1].set_xlabel('Encoding neuron $\\theta_{elbow} in [°]$', fontsize=12)
     axs[0, 0].set_ylabel('r', fontsize=12)
 
-    xlabels = [ang if i % 2 == 0 else None for i, ang in enumerate(parameters['motor_orientations'])]
+    xlabels = [int(ang) if i % 2 == 0 else None for i, ang in enumerate(parameters['motor_orientations'])]
     ylabels = np.round(np.linspace(0, 0.5, 6, endpoint=True), 1)
     axs[0, 0].set_xticks(np.arange(0, parameters['dim_motor'][0]), xlabels)
     axs[0, 1].set_xticks(np.arange(0, parameters['dim_motor'][0]), xlabels),

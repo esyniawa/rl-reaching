@@ -15,7 +15,7 @@ import matplotlib.animation as animation
 
 from kinematics.planar_arms import PlanarArms
 from utils import safe_save, generate_random_coordinate, norm_xy, norm_distance
-from reward_functions_ppo import gaussian_reward, linear_reward, sigmoid_reward, logarithmic_reward
+from reward_functions import gaussian_reward, linear_reward, sigmoid_reward, logarithmic_reward
 
 # torch.set_num_threads(4)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -28,8 +28,33 @@ class ExperienceBuffer:
     def push(self, state, action, reward, next_state, done, log_prob):
         self.buffer.append((state, action, reward, next_state, done, log_prob))
 
-    def sample(self, batch_size: int) -> List:
-        return random.sample(self.buffer, batch_size)
+    def get_batches(self, batch_size: int):
+        """Returns an iterator over mini-batches of data."""
+        # Convert deque to numpy arrays for faster processing
+        data = list(zip(*self.buffer))
+        states = np.array(data[0])
+        actions = np.array(data[1])
+        rewards = np.array(data[2])
+        next_states = np.array(data[3])
+        dones = np.array(data[4])
+        log_probs = np.array(data[5])
+
+        # Calculate number of full batches
+        num_samples = len(self.buffer)
+        indices = np.arange(num_samples)
+        np.random.shuffle(indices)  # Shuffle but maintain sequence within batches
+
+        # Yield full batches
+        for start_idx in range(0, num_samples, batch_size):
+            end_idx = min(start_idx + batch_size, num_samples)
+            batch_indices = indices[start_idx:end_idx]
+
+            yield (torch.FloatTensor(states[batch_indices]),
+                   torch.FloatTensor(actions[batch_indices]),
+                   torch.FloatTensor(rewards[batch_indices]),
+                   torch.FloatTensor(next_states[batch_indices]),
+                   torch.FloatTensor(dones[batch_indices]),
+                   torch.FloatTensor(log_probs[batch_indices]))
 
     def clear(self):
         self.buffer.clear()
@@ -97,7 +122,7 @@ class PPOAgent:
                  output_dim,
                  actor_lr=3e-4, critic_lr=3e-4,
                  gamma=0.99, gae_lambda=0.95, epsilon=0.2,
-                 epochs=10, batch_size=64):
+                 epochs=4, batch_size=64):
 
         self.actor = ActorNetwork(input_dim, output_dim)
         self.critic = CriticNetwork(input_dim)
@@ -131,57 +156,49 @@ class PPOAgent:
             return
 
         for _ in range(self.epochs):
-            batch = replay_buffer.sample(self.batch_size)
-            states, actions, rewards, next_states, dones, old_log_probs = zip(*batch)
+            # Process data sequentially in batches
+            for states, actions, rewards, next_states, dones, old_log_probs in replay_buffer.get_batches(self.batch_size):
+                # Compute returns and advantages
+                with torch.no_grad():
+                    next_values = self.critic(next_states).squeeze()
+                    values = self.critic(states).squeeze()
 
-            states = torch.FloatTensor(np.array(states))
-            actions = torch.FloatTensor(np.array(actions))
-            old_log_probs = torch.FloatTensor(np.array(old_log_probs))
-            rewards = torch.FloatTensor(rewards)
-            next_states = torch.FloatTensor(np.array(next_states))
-            dones = torch.FloatTensor(dones)
+                # Compute returns and advantages
+                advantages = self.compute_gae(rewards=rewards,
+                                              values=values,
+                                              next_values=next_values,
+                                              dones=dones)
+                returns = advantages + values
 
-            # Compute returns and advantages
-            with torch.no_grad():
-                next_values = self.critic(next_states).squeeze()
-                values = self.critic(states).squeeze()
+                if normalize_advantages:
+                    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-10)
 
-            # Compute returns and advantages
-            advantages = self.compute_gae(rewards=rewards,
-                                          values=values,
-                                          next_values=next_values,
-                                          dones=dones)
-            returns = advantages + values
+                # Actor loss
+                mean, std = self.actor(states)
+                dist = Normal(mean, std)
+                new_log_probs = dist.log_prob(actions).sum(dim=-1, keepdim=True)
+                ratio = torch.exp(new_log_probs - old_log_probs.unsqueeze(1))
 
-            if normalize_advantages:
-                advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-10)
+                surr1 = ratio * advantages.unsqueeze(1)
+                surr2 = torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon) * advantages.unsqueeze(1)
 
-            # Actor loss
-            mean, std = self.actor(states)
-            dist = Normal(mean, std)
-            new_log_probs = dist.log_prob(actions).sum(dim=-1, keepdim=True)
-            ratio = torch.exp(new_log_probs - old_log_probs.unsqueeze(1))
+                actor_loss = -torch.min(surr1, surr2).mean()
 
-            surr1 = ratio * advantages.unsqueeze(1)
-            surr2 = torch.clamp(ratio, 1 - self.epsilon, 1 + self.epsilon) * advantages.unsqueeze(1)
+                # Critic loss
+                critic_loss = nn.MSELoss()(self.critic(states), returns.unsqueeze(1))
 
-            actor_loss = -torch.min(surr1, surr2).mean()
+                # Entropy
+                entropy = dist.entropy().mean()
 
-            # Critic loss
-            critic_loss = nn.MSELoss()(self.critic(states), returns.unsqueeze(1))
+                # Combined loss
+                loss = actor_loss + 0.5 * critic_loss - entropy_coef * entropy
 
-            # Entropy
-            entropy = dist.entropy().mean()
-
-            # Combined loss
-            loss = actor_loss + 0.5 * critic_loss - entropy_coef * entropy
-
-            # Update both actor and critic
-            self.actor_optimizer.zero_grad()
-            self.critic_optimizer.zero_grad()
-            loss.backward()
-            self.actor_optimizer.step()
-            self.critic_optimizer.step()
+                # Update both actor and critic
+                self.actor_optimizer.zero_grad()
+                self.critic_optimizer.zero_grad()
+                loss.backward()
+                self.actor_optimizer.step()
+                self.critic_optimizer.step()
 
         # clear buffer after each update because we are on-policy
         replay_buffer.clear()
@@ -215,6 +232,10 @@ class PPOAgent:
 
         self.actor.load_state_dict(torch.load(path + 'actor.pt'))
         self.critic.load_state_dict(torch.load(path + 'critic.pt'))
+
+    @property
+    def name(self):
+        return 'ppo'
 
 
 # Environment wrapper
@@ -355,8 +376,8 @@ def collect_experience(args,
 def train_ppo(Agent: PPOAgent,
               num_reaching_trials: int,
               num_workers: int = 10,
-              buffer_capacity: int = 5_000,
-              steps_per_worker: int = 500,
+              buffer_capacity: int = 4000,
+              steps_per_worker: int = 400,
               num_updates: int = 1,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
 
@@ -390,7 +411,7 @@ def train_ppo(Agent: PPOAgent,
 def test_ppo(Agent: PPOAgent,
              num_reaching_trials: int,
              init_thetas: np.ndarray = np.radians((90, 90)),
-             max_steps: int = 500,  # beware the actions are clipped
+             max_steps: int = 400,  # beware the actions are clipped
              ) -> dict:
 
     target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
@@ -439,15 +460,15 @@ def test_ppo(Agent: PPOAgent,
     return test_results
 
 
-def render_reaching(PPOAgent: PPOAgent,
+def render_reaching(Agent: PPOAgent,
                     init_thetas: np.ndarray = np.radians((90, 90)),
-                    max_steps: int = 500,
+                    max_steps: int = 400,
                     fps: int = 50,
                     save_path: str | None = None):
     """
     Make a video of the reaching task
 
-    :param PPOAgent: Trained PPOAgent
+    :param Agent: Trained PPOAgent
     :param init_thetas: initial joint angles (start position)
     :param max_steps: maximum number of steps the agent can take
     :param fps: frame per second of the video
@@ -480,14 +501,17 @@ def render_reaching(PPOAgent: PPOAgent,
         return line, target, step_text, error_text
 
     def animate(i):
-        if i == 0:
-            global state
-            state = env.reset()
+
+        done = False
+        if done:
+            return line, target, step_text, error_text
         else:
-            action, _ = PPOAgent.get_action(state)
-            state, _, done = env.step(action)
-            if done:
-                return line, target, step_text, error_text
+            if i == 0:
+                global state
+                state = env.reset()
+            else:
+                action, _ = Agent.get_action(state)
+                state, _, done = env.step(action)
 
         # Get current arm position
         arm_positions = PlanarArms.forward_kinematics(arm=env.arm, thetas=env.current_thetas, radians=True)
@@ -535,7 +559,7 @@ if __name__ == "__main__":
             os.makedirs(path)
 
     # parameters
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000, 256_000, 512_000)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000, 256_000,)
     test_trials = sim_args.num_testing_trials
 
     # initialize agent

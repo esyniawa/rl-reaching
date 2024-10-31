@@ -51,7 +51,7 @@ def ppo_collect_simulation_data(sim_ids: Iterable[int],
 if __name__ == '__main__':
     debug: bool = True
 
-    sim_ids = (1, 2, 3, 4, 5)
+    sim_ids = (1, 2, 3)
     result_df = ppo_collect_simulation_data(sim_ids)
 
     # Display the first few rows of the DataFrame

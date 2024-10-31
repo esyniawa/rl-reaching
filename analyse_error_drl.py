@@ -110,7 +110,9 @@ def ppo_plot_error(sim_ids: Iterable[int],
     axs[1].set_xlim(1,
                     128)
     axs[1].legend(fontsize=16, loc="lower right")
-
+    axs[1].set_xlabel('N training trials in thousands', fontsize=16)
+    axs[1].set_xticks((1, 2, 4, 8, 16, 32, 64, 128),
+                      (None, 2, 4, 8, 16, 32, 64, 128), fontsize=14)
     if add_steps:
         axs[2].plot(error_stats_ppo['n_training_trials'], error_stats_ppo['mean_steps'], 'g-', label='Mean Steps')
         axs[2].fill_between(error_stats_ppo['n_training_trials'], error_stats_ppo['mean_steps'] - error_stats_ppo['step_se'],

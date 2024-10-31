@@ -76,7 +76,7 @@ if __name__ == '__main__':
 
         if exp_args.test_pert:
             test_perturb(init_angle=init_angle,
-                         N_trials=20,
+                         N_trials=100,
                          save_path=folder + subfolder,
                          pop_monitor=PopMonitor_testing,
                          plot_error=True,

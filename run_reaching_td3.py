@@ -15,8 +15,7 @@ import matplotlib.animation as animation
 
 from kinematics.planar_arms import PlanarArms
 from utils import safe_save, generate_random_coordinate, norm_xy, norm_distance
-from reward_functions_ppo import gaussian_reward, linear_reward, sigmoid_reward, logarithmic_reward
-from run_reaching_ppo import layer_init
+from reward_functions import gaussian_reward, linear_reward, sigmoid_reward, logarithmic_reward
 
 # torch.set_num_threads(4)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -35,6 +34,20 @@ class ReplayBuffer:
 
     def __len__(self):
         return len(self.buffer)
+
+
+def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
+    """
+    From "Exact solutions to the nonlinear dynamics of learning in deep linear neural networks" - Saxe, A. et al. (2013).
+
+    :param layer:
+    :param std:
+    :param bias_const:
+    :return:
+    """
+    torch.nn.init.orthogonal_(layer.weight, std)
+    torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
 
 
 class Actor(nn.Module):
@@ -197,6 +210,10 @@ class TD3Agent:
         self.critic_2.load_state_dict(torch.load(path + 'critic_2.pt'))
         self.critic_target_2 = deepcopy(self.critic_2)
 
+    @property
+    def name(self):
+        return 'td3'
+
 
 # Environment wrapper
 class ReachingEnvironment:
@@ -328,8 +345,8 @@ def train_td3_parallel(Agent: TD3Agent,
                        num_reaching_trials: int,
                        replay_buffer: ReplayBuffer,
                        num_workers: int = 10,
-                       steps_per_worker: int = 500,
-                       batch_size: int = 256,
+                       steps_per_worker: int = 400,
+                       batch_size: int = 128,
                        num_updates: int = 5,
                        init_thetas: np.ndarray = np.radians((90, 90))) -> TD3Agent:
     """
@@ -368,7 +385,7 @@ def train_td3_parallel(Agent: TD3Agent,
 def test_td3(Agent: TD3Agent,
              num_reaching_trials: int,
              init_thetas: np.ndarray = np.radians((90, 90)),
-             max_steps: int = 500,
+             max_steps: int = 400,
              render_interval: int | None = None,  # Set to N to render every N trials
              save_path: str | None = None  # Path to save renderings if render_interval is set
              ) -> dict:
@@ -485,6 +502,83 @@ def render_trial(env: ReachingEnvironment,
         plt.show()
 
 
+def render_reaching(Agent: TD3Agent,
+                    init_thetas: np.ndarray = np.radians((90, 90)),
+                    max_steps: int = 400,
+                    fps: int = 50,
+                    save_path: str | None = None):
+    """
+    Make a video of the reaching task
+
+    :param Agent: Trained TD3Agent
+    :param init_thetas: initial joint angles (start position)
+    :param max_steps: maximum number of steps the agent can take
+    :param fps: frame per second of the video
+    :param save_path: Save video to this path. If none, the video will be displayed and not saved!
+    :return:
+    """
+    # Initialize environment
+    target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
+    env = ReachingEnvironment(init_thetas=init_thetas, target_thetas=target_thetas, target_pos=target_pos)
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.set_xlim(PlanarArms.x_limits)
+    ax.set_ylim(PlanarArms.y_limits)
+    ax.set_aspect('equal')
+    ax.grid(True)
+
+    # Initialize lines for arm segments and target
+    line, = ax.plot([], [], 'bo-', lw=2)
+    target, = ax.plot(target_pos[0], target_pos[1], 'r*', markersize=10, linestyle=None)
+
+    # Text for step count and error
+    step_text = ax.text(0.02, 0.95, '', transform=ax.transAxes)
+    error_text = ax.text(0.02, 0.90, '', transform=ax.transAxes)
+
+    def init():
+        line.set_data([], [])
+        target.set_data([], [])
+        step_text.set_text('')
+        error_text.set_text('')
+        return line, target, step_text, error_text
+
+    def animate(i):
+        done = False
+        if done:
+            return line, target, step_text, error_text
+        else:
+            if i == 0:
+                global state
+                state = env.reset()
+            else:
+                action = Agent.get_action(state, exploration_noise=False)
+                state, _, done = env.step(action)
+
+        # Get current arm position
+        arm_positions = PlanarArms.forward_kinematics(arm=env.arm, thetas=env.current_thetas, radians=True)
+        x_coords = list(arm_positions[0])
+        y_coords = list(arm_positions[1])
+
+        line.set_data(x_coords, y_coords)
+        target.set_data(env.target_pos[0], env.target_pos[1])
+
+        error = np.linalg.norm(env.target_pos - env.current_pos)
+        step_text.set_text(f'Step: {i}')
+        error_text.set_text(f'Error: {error:.2f} mm')
+
+        return line, target, step_text, error_text
+
+    anim = animation.FuncAnimation(fig, animate, init_func=init, frames=max_steps,
+                                   interval=fps, blit=True)
+
+    if save_path:
+        anim.save(save_path, writer='ffmpeg', fps=30)
+    else:
+        plt.show()
+
+    plt.close(fig)
+
+
 def analyze_performance(test_results: dict, save_path: str | None = None):
     """
     Analyze and visualize test results
@@ -554,7 +648,7 @@ if __name__ == "__main__":
             os.makedirs(path)
 
     # parameters
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000, 256_000, 512_000)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000, 256_000,)
     test_trials = sim_args.num_testing_trials
 
     # initialize agent
