@@ -122,7 +122,7 @@ class PPOAgent:
                  output_dim,
                  actor_lr=3e-4, critic_lr=3e-4,
                  gamma=0.99, gae_lambda=0.95, epsilon=0.2,
-                 epochs=4, batch_size=64):
+                 epochs=5, batch_size=128):
 
         self.actor = ActorNetwork(input_dim, output_dim)
         self.critic = CriticNetwork(input_dim)
