@@ -150,7 +150,7 @@ Results are saved in various formats:
 If you use our neurocomputational model in your research, please cite:
 
 ```bibtex
-@poster{proprioceptive_context_in_motor_learning,
+@INPROCEEDINGS{proprioceptive_context_in_motor_learning,
 author={Syniawa, E. and Hamker, F.H.},
 title={Proprioceptive Context in Motor Learning: A Neurocomputational Study of Basal Ganglia Circuits},
 year={2024},
