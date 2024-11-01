@@ -66,11 +66,6 @@ class ExperienceBuffer:
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     """
     From "Exact solutions to the nonlinear dynamics of learning in deep linear neural networks" - Saxe, A. et al. (2013).
-
-    :param layer:
-    :param std:
-    :param bias_const:
-    :return:
     """
     torch.nn.init.orthogonal_(layer.weight, std)
     torch.nn.init.constant_(layer.bias, bias_const)

@@ -249,24 +249,6 @@ class SACAgent:
             self.log_alpha = torch.load(path + 'log_alpha.pt')
             self.alpha = self.log_alpha.exp()
 
-    def get_state_dict(self):
-        """Get state dict for multiprocessing"""
-        return {
-            'actor': self.actor.state_dict(),
-            'critic1': self.critic1.state_dict(),
-            'critic2': self.critic2.state_dict(),
-            'log_alpha': self.log_alpha if self.automatic_entropy_tuning else None
-        }
-
-    def load_state_dict(self, state_dict):
-        """Load state dict for multiprocessing"""
-        self.actor.load_state_dict(state_dict['actor'])
-        self.critic1.load_state_dict(state_dict['critic1'])
-        self.critic2.load_state_dict(state_dict['critic2'])
-        if self.automatic_entropy_tuning and state_dict['log_alpha'] is not None:
-            self.log_alpha = state_dict['log_alpha']
-            self.alpha = self.log_alpha.exp()
-
     @property
     def name(self):
         return 'sac'
@@ -374,70 +356,41 @@ class ReachingEnvironment:
                                self.norm_distance]), reward, done
 
 
-def collect_experience_sac(args):
-    agent_state_dict, num_steps, init_thetas, target_thetas, target_pos = args
+def train_sac(Agent: SACAgent,
+              num_reaching_trials: int,
+              replay_buffer: ReplayBuffer,
+              steps_per_trial: int = 400,
+              trajectories_per_trial: int = 10,
+              batch_size: int = 128,
+              num_updates: int = 5,
+              init_thetas: np.ndarray = np.radians((90, 90))) -> SACAgent:
 
-    # Create a new agent instance for this worker
-    worker_agent = SACAgent(input_dim=6, output_dim=2)  # Use same dimensions as main agent!! TODO: Make this less hacky
-    worker_agent.load_state_dict(agent_state_dict)
-    worker_agent.actor.eval()  # Set to eval mode
+    for trial in range(num_reaching_trials):
+        # Initialize target for the environment
+        target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
+        env = ReachingEnvironment(target_thetas=target_thetas, target_pos=target_pos, init_thetas=init_thetas)
 
-    # Set the seed for this worker
-    torch.manual_seed(random.randint(0, 1000000))
-    np.random.seed(random.randint(0, 1000000))
-
-    env = ReachingEnvironment(target_thetas=target_thetas, target_pos=target_pos, init_thetas=init_thetas)
-    state = env.reset()
-    experiences = []
-
-    for _ in range(num_steps):
-        # Get action from worker agent
-        with torch.no_grad():
-            action = worker_agent.get_action(state, exploration_noise=True)
-        next_state, reward, done = env.step(action, clip_thetas=True, clip_penalty=True)
-        experiences.append((state, action, reward, next_state, done))
-
-        state = next_state
-        if done:
+        for _ in range(trajectories_per_trial):
+            # Collect experience
             state = env.reset()
+            for _ in range(steps_per_trial):
+                action = Agent.get_action(state, exploration_noise=True)
+                next_state, reward, done = env.step(action, clip_thetas=True, clip_penalty=True)
 
-    del worker_agent  # Clean up
-    return experiences
+                # Store experience
+                replay_buffer.push(state, action, reward, next_state, done)
 
+                state = next_state
+                if done:
+                    state = env.reset()
 
-def train_sac_parallel(Agent: SACAgent,
-                       num_reaching_trials: int,
-                       replay_buffer: ReplayBuffer,
-                       num_workers: int = 10,
-                       steps_per_worker: int = 400,
-                       batch_size: int = 128,
-                       num_updates: int = 5,
-                       init_thetas: np.ndarray = np.radians((90, 90))) -> SACAgent:
-    with Pool(num_workers) as pool:
-        for trial in range(num_reaching_trials):
-            # Initialize target for all environments
-            target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
+        # Perform updates if we have enough samples
+        if len(replay_buffer) > batch_size:
+            for _ in range(num_updates):
+                Agent.update(replay_buffer, batch_size)
 
-            # Get state dict for workers
-            agent_state_dict = Agent.get_state_dict()
-
-            # Collect experiences using multiple workers
-            worker_args = [(agent_state_dict, steps_per_worker, init_thetas, target_thetas, target_pos)
-                           for _ in range(num_workers)]
-            worker_experiences = pool.map(collect_experience_sac, worker_args)
-
-            # Add experiences to replay buffer
-            for experiences in worker_experiences:
-                for exp in experiences:
-                    replay_buffer.push(*exp)
-
-            # Perform multiple updates after collecting new experiences
-            if len(replay_buffer) > batch_size:
-                for _ in range(num_updates):
-                    Agent.update(replay_buffer, batch_size)
-
-            # New initial angles are the current target angles
-            init_thetas = target_thetas
+        # New initial angles are the current target angles
+        init_thetas = target_thetas
 
     return Agent
 
@@ -470,7 +423,6 @@ def test_sac(Agent: SACAgent,
         trajectory = []  # Store positions during this trial
 
         for step in range(max_steps):
-            # Get deterministic action (no exploration noise during testing)
             action = Agent.get_action(state, exploration_noise=False)
             next_state, reward, done = ReachEnv.step(action)
 

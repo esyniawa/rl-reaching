@@ -39,11 +39,6 @@ class ReplayBuffer:
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     """
     From "Exact solutions to the nonlinear dynamics of learning in deep linear neural networks" - Saxe, A. et al. (2013).
-
-    :param layer:
-    :param std:
-    :param bias_const:
-    :return:
     """
     torch.nn.init.orthogonal_(layer.weight, std)
     torch.nn.init.constant_(layer.bias, bias_const)
@@ -123,7 +118,6 @@ class TD3Agent:
             state = torch.FloatTensor(state).unsqueeze(0)
             action = self.actor(state).squeeze(0).numpy()
 
-            # Note: Policy smoothing noise is handled separately in the update method
             # This is only for exploration during data collection
             if exploration_noise:
                 exploration_noise = np.random.normal(0, self.exploration_noise, size=action.shape)
@@ -131,7 +125,7 @@ class TD3Agent:
 
         return action
 
-    def update(self, replay_buffer: ReplayBuffer, batch_size: int = 256):
+    def update(self, replay_buffer: ReplayBuffer, batch_size: int = 128):
         self.total_it += 1
 
         # Sample from replay buffer
@@ -633,7 +627,7 @@ if __name__ == "__main__":
     sim_args_parser.add_argument('--num_workers', type=int, default=10)
     sim_args_parser.add_argument('--num_testing_trials', type=int, default=100)
     sim_args_parser.add_argument('--buffer_size', type=int, default=100_000)
-    sim_args_parser.add_argument('--batch_size', type=int, default=256)
+    sim_args_parser.add_argument('--batch_size', type=int, default=128)
     sim_args = sim_args_parser.parse_args()
 
     # import matplotlib if the error should be plotted
