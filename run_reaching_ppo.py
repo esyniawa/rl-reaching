@@ -370,8 +370,8 @@ def collect_experience(args,
 # Training loop
 def train_ppo(Agent: PPOAgent,
               num_reaching_trials: int,
-              num_workers: int = 10,
-              buffer_capacity: int = 4000,
+              num_workers: int = 5,
+              buffer_capacity: int = 2000,
               steps_per_worker: int = 400,
               num_updates: int = 1,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
@@ -554,7 +554,7 @@ if __name__ == "__main__":
             os.makedirs(path)
 
     # parameters
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000, 256_000,)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000,)
     test_trials = sim_args.num_testing_trials
 
     # initialize agent
