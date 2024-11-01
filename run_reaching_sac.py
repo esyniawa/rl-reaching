@@ -364,7 +364,6 @@ def train_sac(Agent: SACAgent,
               batch_size: int = 128,
               num_updates: int = 5,
               init_thetas: np.ndarray = np.radians((90, 90))) -> SACAgent:
-
     for trial in range(num_reaching_trials):
         # Initialize target for the environment
         target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
@@ -624,7 +623,7 @@ if __name__ == "__main__":
     sim_args_parser.add_argument('--num_workers', type=int, default=10)
     sim_args_parser.add_argument('--num_testing_trials', type=int, default=100)
     sim_args_parser.add_argument('--buffer_size', type=int, default=100_000)
-    sim_args_parser.add_argument('--batch_size', type=int, default=256)
+    sim_args_parser.add_argument('--batch_size', type=int, default=128)
     sim_args = sim_args_parser.parse_args()
 
     # import matplotlib if the error should be plotted
@@ -639,7 +638,7 @@ if __name__ == "__main__":
             os.makedirs(path)
 
     # parameters
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000, 256_000,)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000,)
     test_trials = sim_args.num_testing_trials
 
     # initialize agent
@@ -655,11 +654,10 @@ if __name__ == "__main__":
         if not os.path.exists(save_path_training + subfolder):
             os.makedirs(save_path_training + subfolder)
 
-        agent = train_sac_parallel(agent,
-                                   num_reaching_trials=trials,
-                                   replay_buffer=replay_buffer,
-                                   num_workers=sim_args.num_workers,
-                                   batch_size=sim_args.batch_size)
+        agent = train_sac(agent,
+                          num_reaching_trials=trials,
+                          replay_buffer=replay_buffer,
+                          batch_size=sim_args.batch_size)
 
         if sim_args.save:
             agent.save(save_path_training + subfolder)
