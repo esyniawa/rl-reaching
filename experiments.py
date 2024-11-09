@@ -13,6 +13,16 @@ from monitoring import PopMonitor, ConMonitor
 import matplotlib.pyplot as plt
 
 
+def disable_transmission(projections: tuple[ann.Projection] = (VL_M1,)):
+    for proj in projections:
+        proj.transmission = False
+
+
+def enable_transmission(projections: tuple[ann.Projection] = (VL_M1,)):
+    for proj in projections:
+        proj.transmission = True
+
+
 def training(N_trials: int,
              init_angle: np.ndarray,
              save_path: str,
@@ -28,6 +38,9 @@ def training(N_trials: int,
         raise ValueError('PopMonitor must be specified if animate populations is True')
     if save_path[-1] != '/':
         save_path += '/'
+
+    # disable transmission
+    disable_transmission()
 
     # initialize monitors
     if pop_monitor is not None:
@@ -101,13 +114,15 @@ def training_fix_points(points: list[np.ndarray],
                         con_monitor: ConMonitor | None = None,
                         save_synapses: bool = False,
                         animate_populations: bool = False) -> None:
-
     # look for possible errors
     if pop_monitor is None and animate_populations is True:
         raise ValueError('PopMonitor must be specified if animate populations is True')
     if save_path[-1] != '/':
         save_path += '/'
     assert init_angle.size == 2, 'init_angle must be a 2D array'
+
+    # disable transmission
+    disable_transmission()
 
     # initialize monitors
     if pop_monitor is not None:
@@ -117,10 +132,10 @@ def training_fix_points(points: list[np.ndarray],
         con_monitor.extract_weights()
 
     for point in points:
-        init_angle = train_fixed_position(current_thetas=init_angle,
-                                          goal=point,
-                                          t_reward=reward_time,
-                                          t_wait=wait_time)
+        init_angle, _, _ = train_fixed_position(current_thetas=init_angle,
+                                                goal=point,
+                                                t_reward=reward_time,
+                                                t_wait=wait_time)
 
     # saving data
     # rates
@@ -164,6 +179,9 @@ def test_reach(init_angle: np.ndarray,
         raise ValueError('Monitor populations must be specified if animate populations is True')
     if save_path[-1] != '/':
         save_path += '/'
+
+    # enable transmission
+    enable_transmission()
 
     # get points to follow
     if test_condition == 'cube':
@@ -263,12 +281,14 @@ def test_perturb(init_angle: np.ndarray,
                  show_plots: bool = False,
                  scale_pm: float = 1.0,
                  scale_s1: float = 1.0) -> None:
-
     # look for possible errors
     if pop_monitor is None and animate_populations is True:
         raise ValueError('Monitor populations must be specified if animate populations is True')
     if save_path[-1] != '/':
         save_path += '/'
+
+    # enable transmission
+    enable_transmission()
 
     # start monitors
     if pop_monitor is not None:
@@ -320,9 +340,13 @@ def test_perturb(init_angle: np.ndarray,
         test_infos['perturbation_shoulder'].append(pert_sh)
         test_infos['perturbation_elbow'].append(pert_el)
         test_infos['error_before_pert'].append(
-            np.linalg.norm(random_point - PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=out_1, radians=False)[:, -1]))
+            np.linalg.norm(
+                random_point - PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=out_1, radians=False)[
+                               :, -1]))
         test_infos['error_after_pert'].append(
-            np.linalg.norm(random_point - PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=out_2, radians=False)[:, -1]))
+            np.linalg.norm(
+                random_point - PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=out_2, radians=False)[
+                               :, -1]))
 
     # saving data
     if not path.exists('results/' + 'test_pert_' + save_path):

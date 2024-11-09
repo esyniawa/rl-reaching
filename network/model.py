@@ -3,17 +3,18 @@ from .params import parameters
 from .connections import *
 from .definitions import *
 
-ann.setup(num_threads=8)
+ann.setup(num_threads=2)
 
 # input populations
 PM = ann.Population(geometry=parameters['dim_pm'], neuron=BaselineNeuron, name='PM')
+PM.tau_up = 20.
 S1 = ann.Population(geometry=parameters['dim_s1'], neuron=BaselineNeuron, name='S1')
 
 SNc = ann.Population(geometry=2, neuron=DopamineNeuron, name='SNc')
 
 # transmission populations into putamen
 CM = ann.Population(geometry=parameters['dim_motor'], neuron=BaselineNeuron, name='CM')
-CM.tau_up = 20.
+CM.tau_up = 10.
 CM.noise = 0.01
 
 # CBGT Loop (putamen)
@@ -21,14 +22,14 @@ StrD1 = ann.Population(geometry=parameters['dim_str'], neuron=StriatumD1Neuron, 
 StrD1.noise = 0.0
 
 SNr = ann.Population(geometry=parameters['dim_bg'], neuron=SNrNeuron, name='SNr', stop_condition='r<0.1')
-SNr.noise = 0.01
+SNr.noise = 0.05
 
 VL = ann.Population(geometry=parameters['dim_bg'], neuron=LinearNeuron, name='VL')
-VL.noise = 0.01
+VL.noise = 0.05
 VL.baseline = ann.get_constant('baseline_snr') - 0.065
 
 M1 = ann.Population(geometry=parameters['dim_bg'], neuron=LinearNeuron, name='M1')
-M1.tau = 50.
+M1.tau = 20.
 M1.noise = 0.0
 M1.baseline = 0.0
 
@@ -37,12 +38,15 @@ Output_Pop_Shoulder = ann.Population(geometry=3, neuron=OutputNeuron, name='Outp
 Output_Pop_Elbow = ann.Population(geometry=3, neuron=OutputNeuron, name='Output_Elbow')
 
 # Projections
-CM_StrD1 = {}
-w_CM_str = w_one_to_ones(preDim=parameters['dim_motor'][0], postDim=tuple(list(parameters['dim_s1']) + [parameters['dim_motor'][0]]), weight=parameters['strength_cm'])
+CM_M1 = ann.Projection(pre=CM, post=M1, target='exc', name='CM_M1')
+CM_M1.connect_one_to_one(weights=1.0)
+
+M1_StrD1 = {}
+w_M1_str = w_one_to_ones(preDim=parameters['dim_motor'][0], postDim=tuple(list(parameters['dim_s1']) + [parameters['dim_motor'][0]]), weight=parameters['strength_m1'])
 for i, subset_key in enumerate(parameters['subsets_str']):
     interval = parameters['subsets_str'][subset_key]
-    CM_StrD1[subset_key] = ann.Projection(pre=CM[:, i], post=StrD1[:, :, interval[0]:interval[1]], target='exc', name=f"CM_StrD1_{subset_key}")
-    CM_StrD1[subset_key].connect_from_matrix(w_CM_str)
+    M1_StrD1[subset_key] = ann.Projection(pre=M1[:, i], post=StrD1[:, :, interval[0]:interval[1]], target='exc', name=f"CM_StrD1_{subset_key}")
+    M1_StrD1[subset_key].connect_from_matrix(w_M1_str)
 
 S1_StrD1 = ann.Projection(pre=S1, post=StrD1, target='mod')
 w_s1 = w_2D_to_3D_S1(preDim=parameters['dim_s1'], postDim=StrD1.geometry)
@@ -58,10 +62,6 @@ for i, subset_key in enumerate(parameters['subsets_str']):
     StrD1_SNr[subset_key] = ann.Projection(pre=StrD1[:, :, interval[0]:interval[1]], post=SNr[:, i],
                                            target='inh', name=f'D1_SNr_{subset_key}')
     StrD1_SNr[subset_key].connect_from_matrix(w_Str_SNr)
-
-# dopa connections
-SNc_SNr = ann.Projection(pre=SNc, post=SNr, target='dopa')
-SNc_SNr.connect_all_to_all(1.0)
 
 SNc_StrD1 = ann.Projection(pre=SNc, post=StrD1, target='dopa')
 SNc_StrD1.connect_all_to_all(1.0)

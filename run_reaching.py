@@ -19,7 +19,7 @@ if __name__ == '__main__':
     exp_args = exp_parser.parse_args()
 
     # number of training trials
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 52_000)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000)
     test_condition = exp_args.test_reach_condition
 
     # init angle of arms

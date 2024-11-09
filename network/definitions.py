@@ -44,7 +44,7 @@ LinearNeuron = ann.Neuron(
     """,
     equations="""
         tau*dmp/dt + mp = sum(exc) - sum(inh) + noise*Uniform(-1.0,1.0) + baseline
-        r = mp : min=0.0 
+        r = pos(mp) 
     """
 )
 
@@ -56,8 +56,7 @@ StriatumD1Neuron = ann.Neuron(
     """,
     equations="""
         tau*dmp/dt + mp = sum(mod) * (sum(exc) - sum(inh)) + noise*Uniform(-1.0,1.0) + baseline
-        r = if (mp > 1.0): logistic(mp)
-            else: pos(mp)
+        r = pos(mp)
     """
 )
 
@@ -103,7 +102,7 @@ PostCovarianceNoThreshold = ann.Synapse(
     parameters="""
         tau = 200.0 : projection
         tau_alpha = 100.0 : projection
-        regularization_threshold = 0.8 : projection
+        regularization_threshold = 0.7 : projection
         K_burst = 1.0 : projection
         K_dip = 0.4 : projection
         DA_type = 1 : projection

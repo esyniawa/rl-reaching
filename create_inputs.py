@@ -42,8 +42,9 @@ def make_inputs(current_angles: np.ndarray,
 
     # calculate motor input
     input_cm = np.zeros(parameters['dim_motor'])
-    for layer in range(parameters['dim_motor'][1]):
-        input_cm[:, layer] = gauss(mu=new_thetas[layer],
+    for layer, (current, target) in enumerate(zip(current_angles, new_thetas)):
+        # motor movement is the change in thetas
+        input_cm[:, layer] = gauss(mu=target - current,
                                    sigma=parameters['sig_m1'],
                                    x=parameters['motor_orientations'])
 
@@ -105,6 +106,8 @@ def train_position(current_thetas: np.ndarray,
                           t_sim=t_reward,
                           training=True)
 
+    # "movement"
+    out += current_thetas
     return new_thetas, out, sim_time
 
 
@@ -121,7 +124,8 @@ def train_fixed_position(current_thetas: np.ndarray,
                           t_wait=t_wait,
                           t_sim=t_reward,
                           training=True)
-
+    # "movement"
+    out += current_thetas
     return new_thetas, out, sim_time
 
 
@@ -143,6 +147,8 @@ def test_movement(current_thetas: np.ndarray,
                                    t_sim=t_movement,
                                    training=False)
 
+    # "movement"
+    output_theta += current_thetas
     output_theta = PlanarArms.clip_values(output_theta, radians=False)
     if arms_model is not None:
         arms_model.change_angle(arm='right', new_thetas=output_theta, radians=False)
@@ -189,6 +195,10 @@ def test_perturbation(current_thetas: np.ndarray,
                                        t_sim=t_movement,
                                        training=False)
 
+    output_theta_1 += current_thetas
+    output_theta_1 = PlanarArms.clip_values(output_theta_1, radians=False)
+
+    output_theta_2 += current_thetas
     output_theta_2 = PlanarArms.clip_values(output_theta_2, radians=False)
 
     if arms_model is not None:
