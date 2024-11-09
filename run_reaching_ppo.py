@@ -60,17 +60,23 @@ class ExperienceBuffer:
         """Returns a single random mini-batch of specified size."""
         if len(self.buffer) < batch_size:
             batch_size = len(self.buffer)
+        data = list(zip(*self.buffer))
+        states = np.array(data[0])
+        actions = np.array(data[1])
+        rewards = np.array(data[2])
+        next_states = np.array(data[3])
+        dones = np.array(data[4])
+        log_probs = np.array(data[5])
 
-        index = np.random.randint(0, len(self.buffer)-batch_size)
-        batch = self.buffer[index:index+batch_size]
-        states, actions, rewards, next_states, dones, log_probs = zip(*batch)
+        # choose a random index
+        random_index = random.randint(0, len(self.buffer) - batch_size)
 
-        return (torch.FloatTensor(np.array(states)),
-                torch.FloatTensor(np.array(actions)),
-                torch.FloatTensor(rewards),
-                torch.FloatTensor(np.array(next_states)),
-                torch.FloatTensor(dones),
-                torch.FloatTensor(log_probs))
+        yield (torch.FloatTensor(states[random_index:(random_index + batch_size)]),
+               torch.FloatTensor(actions[random_index:(random_index + batch_size)]),
+               torch.FloatTensor(rewards[random_index:(random_index + batch_size)]),
+               torch.FloatTensor(next_states[random_index:(random_index + batch_size)]),
+               torch.FloatTensor(dones[random_index:(random_index + batch_size)]),
+               torch.FloatTensor(log_probs[random_index:(random_index + batch_size)]))
 
     def clear(self):
         self.buffer.clear()
@@ -133,7 +139,7 @@ class PPOAgent:
                  output_dim,
                  actor_lr=3e-4, critic_lr=3e-4,
                  gamma=0.99, gae_lambda=0.95, epsilon=0.2,
-                 epochs=1, batch_size=128):
+                 epochs=1, batch_size=256):
 
         self.actor = ActorNetwork(input_dim, output_dim)
         self.critic = CriticNetwork(input_dim)
@@ -168,7 +174,8 @@ class PPOAgent:
 
         for _ in range(self.epochs):
             # Process data sequentially in batches
-            for states, actions, rewards, next_states, dones, old_log_probs in replay_buffer.get_random_minibatch(self.batch_size):
+            for states, actions, rewards, next_states, dones, old_log_probs in replay_buffer.get_random_minibatch(
+                    self.batch_size):
                 # Compute returns and advantages
                 with torch.no_grad():
                     next_values = self.critic(next_states).squeeze()
@@ -289,7 +296,8 @@ class ReachingEnvironment:
         return target_thetas, target_pos
 
     def get_position(self, thetas: np.ndarray, radians: bool = True, check_bounds: bool = True) -> np.ndarray:
-        return PlanarArms.forward_kinematics(arm=self.arm, thetas=thetas, radians=radians, check_limits=check_bounds)[:, -1]
+        return PlanarArms.forward_kinematics(arm=self.arm, thetas=thetas, radians=radians, check_limits=check_bounds)[:,
+               -1]
 
     def reset(self):
         self.current_thetas = self.init_thetas.copy()
@@ -319,9 +327,11 @@ class ReachingEnvironment:
         reward = 0.
         # give penalty if action leads to out of joint bounds
         if clip_penalty:
-            if self.current_thetas[0] < PlanarArms.l_upper_arm_limit or self.current_thetas[0] > PlanarArms.u_upper_arm_limit:
+            if self.current_thetas[0] < PlanarArms.l_upper_arm_limit or self.current_thetas[
+                0] > PlanarArms.u_upper_arm_limit:
                 reward -= 5.
-            if self.current_thetas[1] < PlanarArms.l_forearm_limit or self.current_thetas[1] > PlanarArms.u_forearm_limit:
+            if self.current_thetas[1] < PlanarArms.l_forearm_limit or self.current_thetas[
+                1] > PlanarArms.u_forearm_limit:
                 reward -= 5.
 
         if clip_thetas:
@@ -351,7 +361,6 @@ class ReachingEnvironment:
 def collect_experience(args,
                        add_exploratory_noise: float | None = 0.1,
                        reset_if_reached_bounds: bool = True):
-
     Agent, num_steps, init_thetas, target_thetas, target_pos, = args
 
     # Set the seed for this worker
@@ -391,7 +400,6 @@ def train_ppo(Agent: PPOAgent,
               steps_per_worker: int = 400,
               num_updates: int = 1,
               init_thetas: np.ndarray = np.radians((90, 90))) -> PPOAgent:
-
     replay_buffer = ExperienceBuffer(buffer_capacity)
     pool = Pool(num_workers)
 
@@ -424,7 +432,6 @@ def test_ppo(Agent: PPOAgent,
              init_thetas: np.ndarray = np.radians((90, 90)),
              max_steps: int = 400,  # beware the actions are clipped
              ) -> dict:
-
     target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
     ReachEnv = ReachingEnvironment(init_thetas=init_thetas, target_thetas=target_thetas, target_pos=target_pos)
 
@@ -561,8 +568,9 @@ if __name__ == "__main__":
     sim_args_parser.add_argument('--id', type=int, default=0, help='Simulation ID')
     sim_args_parser.add_argument('--save', type=bool, default=True)
     sim_args_parser.add_argument('--do_plot', type=bool, default=True)
-    sim_args_parser.add_argument('--num_workers', type=int, default=10)
+    sim_args_parser.add_argument('--num_workers', type=int, default=5)
     sim_args_parser.add_argument('--num_testing_trials', type=int, default=100)
+    sim_args_parser.add_argument('--batch_size', type=int, default=256)
     sim_args = sim_args_parser.parse_args()
 
     # import matplotlib if the error should be plotted
@@ -583,7 +591,7 @@ if __name__ == "__main__":
     # initialize agent
     state_dim = 6  # Current joint angles (4) + cartesian error to target position (2)
     action_dim = 2  # Changes in joint angles
-    agent = PPOAgent(input_dim=state_dim, output_dim=action_dim)
+    agent = PPOAgent(input_dim=state_dim, output_dim=action_dim, batch_size=sim_args.batch_size)
 
     # training loop TODO: make ajustments
     for trials in training_trials:

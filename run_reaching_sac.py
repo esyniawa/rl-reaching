@@ -607,6 +607,7 @@ if __name__ == "__main__":
         agent = train_sac(agent,
                           num_reaching_trials=trials,
                           replay_buffer=replay_buffer,
+                          trajectories_per_trial=sim_args.num_workers,
                           batch_size=sim_args.batch_size)
 
         if sim_args.save:
