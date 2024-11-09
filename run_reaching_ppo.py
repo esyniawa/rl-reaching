@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 from kinematics.planar_arms import PlanarArms
-from utils import safe_save, generate_random_coordinate, norm_xy, norm_distance
+from utils import safe_save, generate_random_coordinate, norm_xy, norm_distance, analyze_performance
 from reward_functions import gaussian_reward, linear_reward, sigmoid_reward, logarithmic_reward
 
 # torch.set_num_threads(4)
@@ -435,7 +435,10 @@ def test_ppo(Agent: PPOAgent,
         'error': [],
         'total_reward': [],
         'steps': [],
+        'success_rate': 0.0  # Percentage of successful reaches
     }
+
+    successful_reaches = 0
 
     for trial in range(num_reaching_trials):
         # initialize target for the environment
@@ -450,16 +453,17 @@ def test_ppo(Agent: PPOAgent,
             episode_reward += reward
 
             if done:
+                successful_reaches += 1
                 break
 
-        test_results['target_thetas'].append(ReachEnv.target_thetas)
-        test_results['executed_thetas'].append(ReachEnv.current_thetas)
-        test_results['target_pos'].append(ReachEnv.target_pos)
-        test_results['error'].append(
-            np.linalg.norm(ReachEnv.target_pos - PlanarArms.forward_kinematics(arm=ReachEnv.arm,
-                                                                               thetas=ReachEnv.current_thetas,
-                                                                               radians=True,
-                                                                               check_limits=False)[:, -1]))
+        # Store results for this trial
+        test_results['target_thetas'].append(ReachEnv.target_thetas.copy())
+        test_results['executed_thetas'].append(ReachEnv.current_thetas.copy())
+        test_results['target_pos'].append(ReachEnv.target_pos.copy())
+
+        # Calculate final error
+        final_error = np.linalg.norm(ReachEnv.target_pos - ReachEnv.current_pos)
+        test_results['error'].append(final_error)
         test_results['total_reward'].append(episode_reward)
         test_results['steps'].append(step + 1)
 
@@ -467,6 +471,9 @@ def test_ppo(Agent: PPOAgent,
         init_thetas = target_thetas
         target_thetas, target_pos = ReachingEnvironment.random_target(init_thetas=init_thetas)
         ReachEnv.set_parameters(target_thetas=target_thetas, target_pos=target_pos, init_thetas=init_thetas)
+
+    # Calculate overall success rate
+    test_results['success_rate'] = (successful_reaches / num_reaching_trials) * 100
 
     return test_results
 
@@ -570,7 +577,7 @@ if __name__ == "__main__":
             os.makedirs(path)
 
     # parameters
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000,)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000, 256_000, 512_000)
     test_trials = sim_args.num_testing_trials
 
     # initialize agent
@@ -596,12 +603,6 @@ if __name__ == "__main__":
         np.savez(save_path_testing + subfolder + 'results.npz', **results_dict)
 
         if sim_args.do_plot:
-            fig, axs = plt.subplots(nrows=2)
-            axs[0].plot(np.array(results_dict['error']))
-            axs[0].set_title('Error in [mm]')
-            axs[1].plot(np.array(results_dict['total_reward']))
-            axs[1].set_title('Reward')
-            plt.savefig(save_path_testing + subfolder + 'error.pdf', dpi=300, bbox_inches='tight', pad_inches=0)
-            plt.close(fig)
+            analyze_performance(results_dict, save_path=save_path_testing + subfolder + "performance.pdf")
 
     print('Done!')

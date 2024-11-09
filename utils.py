@@ -103,6 +103,56 @@ def safe_save(save_name: str, array: np.ndarray) -> None:
         np.save(save_name + '.npy', array)
 
 
+def analyze_performance(test_results: dict, save_path: str | None = None, print_results: bool = True):
+    """
+    Analyze and visualize test results for DRL reaching task
+    """
+    import matplotlib.pyplot as plt
+
+
+    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
+
+    # Error distribution
+    axs[0, 0].hist(test_results['error'], bins=30)
+    axs[0, 0].set_title('Error Distribution')
+    axs[0, 0].set_xlabel('Error (mm)')
+    axs[0, 0].set_ylabel('Count')
+
+    # Steps to completion
+    axs[0, 1].hist(test_results['steps'], bins=30)
+    axs[0, 1].set_title('Steps to Completion')
+    axs[0, 1].set_xlabel('Steps')
+    axs[0, 1].set_ylabel('Count')
+
+    # Error over trials
+    axs[1, 0].plot(test_results['error'])
+    axs[1, 0].set_title('Error over Trials')
+    axs[1, 0].set_xlabel('Trial')
+    axs[1, 0].set_ylabel('Error (mm)')
+
+    # Reward over trials
+    axs[1, 1].plot(test_results['total_reward'])
+    axs[1, 1].set_title('Reward over Trials')
+    axs[1, 1].set_xlabel('Trial')
+    axs[1, 1].set_ylabel('Total Reward')
+
+    plt.tight_layout()
+
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+    else:
+        plt.show()
+
+    if print_results:
+        # Print summary statistics
+        print("\nPerformance Summary:")
+        print(f"Success Rate: {test_results['success_rate']:.2f}%")
+        print(f"Average Error: {np.mean(test_results['error']):.2f} ± {np.std(test_results['error']):.2f} mm")
+        print(f"Average Steps: {np.mean(test_results['steps']):.2f} ± {np.std(test_results['steps']):.2f}")
+        print(f"Average Reward: {np.mean(test_results['total_reward']):.2f} ± {np.std(test_results['total_reward']):.2f}")
+
+
 if __name__ == '__main__':
     target_thetas, target_xy = generate_random_coordinate()
     current_thetas = np.radians((90., 90.))

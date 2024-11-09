@@ -3,7 +3,7 @@ from .params import parameters
 from .connections import *
 from .definitions import *
 
-ann.setup(num_threads=2)
+ann.setup(num_threads=6)
 
 # input populations
 PM = ann.Population(geometry=parameters['dim_pm'], neuron=BaselineNeuron, name='PM')

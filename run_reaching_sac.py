@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 from kinematics.planar_arms import PlanarArms
-from utils import safe_save, generate_random_coordinate, norm_xy, norm_distance
+from utils import safe_save, generate_random_coordinate, norm_xy, norm_distance, analyze_performance
 from reward_functions import gaussian_reward, linear_reward, sigmoid_reward, logarithmic_reward
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -565,52 +565,6 @@ def render_reaching(Agent: SACAgent,
     plt.close(fig)
 
 
-def analyze_performance(test_results: dict, save_path: str | None = None):
-    """
-    Analyze and visualize test results
-    """
-    fig, axs = plt.subplots(2, 2, figsize=(15, 10))
-
-    # Error distribution
-    axs[0, 0].hist(test_results['error'], bins=30)
-    axs[0, 0].set_title('Error Distribution')
-    axs[0, 0].set_xlabel('Error (mm)')
-    axs[0, 0].set_ylabel('Count')
-
-    # Steps to completion
-    axs[0, 1].hist(test_results['steps'], bins=30)
-    axs[0, 1].set_title('Steps to Completion')
-    axs[0, 1].set_xlabel('Steps')
-    axs[0, 1].set_ylabel('Count')
-
-    # Error over trials
-    axs[1, 0].plot(test_results['error'])
-    axs[1, 0].set_title('Error over Trials')
-    axs[1, 0].set_xlabel('Trial')
-    axs[1, 0].set_ylabel('Error (mm)')
-
-    # Reward over trials
-    axs[1, 1].plot(test_results['total_reward'])
-    axs[1, 1].set_title('Reward over Trials')
-    axs[1, 1].set_xlabel('Trial')
-    axs[1, 1].set_ylabel('Total Reward')
-
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close()
-    else:
-        plt.show()
-
-    # Print summary statistics
-    print("\nPerformance Summary:")
-    print(f"Success Rate: {test_results['success_rate']:.2f}%")
-    print(f"Average Error: {np.mean(test_results['error']):.2f} ± {np.std(test_results['error']):.2f} mm")
-    print(f"Average Steps: {np.mean(test_results['steps']):.2f} ± {np.std(test_results['steps']):.2f}")
-    print(f"Average Reward: {np.mean(test_results['total_reward']):.2f} ± {np.std(test_results['total_reward']):.2f}")
-
-
 if __name__ == "__main__":
     sim_args_parser = argparse.ArgumentParser()
     sim_args_parser.add_argument('--id', type=int, default=0, help='Simulation ID')
@@ -634,7 +588,7 @@ if __name__ == "__main__":
             os.makedirs(path)
 
     # parameters
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000,)
+    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000, 256_000, 512_000)
     test_trials = sim_args.num_testing_trials
 
     # initialize agent
