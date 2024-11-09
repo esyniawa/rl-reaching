@@ -28,26 +28,27 @@ The basal ganglia-based model implements:
 
 #### PPO Implementation
 - Actor-Critic architecture with separate policy and value networks
-- Gaussian action distribution for continuous action space
+- Gaussian action distribution for continuous action space 
+- Standard likelihood ratio method for gradient estimation (REINFORCE-like)
 - Generalized Advantage Estimation (GAE)
-- Experience replay buffer with mini-batch updates
+- Experience buffer with mini-batch updates
 - Parallel environment sampling using multiple workers
 
-#### SAC Implementation
-- Maximum entropy RL framework
-- Dual Q-networks to mitigate positive bias
-- Automatic entropy tuning
-- Gaussian policy with reparameterization trick
-- Experience replay for off-policy learning
-- Soft policy updates
-
 #### TD3 Implementation
+- Experience replay buffer
 - Twin delayed Q-learning to reduce overestimation bias
 - Delayed policy updates
 - Target policy smoothing
 - Clipped double Q-learning
-- Experience replay buffer
 - Target networks with soft updates
+
+#### SAC Implementation
+- Experience replay buffer
+- Maximum entropy RL framework
+- Dual Critic-networks to mitigate positive bias (from TD3)
+- Automatic entropy tuning
+- Gaussian policy with reparameterization trick
+- Soft policy updates
 
 ## Installation
 
@@ -127,7 +128,7 @@ Common Options:
 results/
 ├── training_{algorithm}_{id}/
 │   └── model_{trials}/
-│       ├─── (Synaptic) weigths of the neural network 
+│       ├─── (Synaptic) weights of the neural network 
 │       └─── (Monitors)
 └── test_{algorithm}_{id}/
     └── model_{trials}/

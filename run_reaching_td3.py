@@ -341,7 +341,7 @@ def train_td3_parallel(Agent: TD3Agent,
                        num_workers: int = 10,
                        steps_per_worker: int = 400,
                        batch_size: int = 128,
-                       num_updates: int = 5,
+                       num_updates: int = 1,
                        init_thetas: np.ndarray = np.radians((90, 90))) -> TD3Agent:
     """
     Train TD3 agent using parallel workers for experience collection

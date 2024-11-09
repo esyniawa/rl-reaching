@@ -56,6 +56,22 @@ class ExperienceBuffer:
                    torch.FloatTensor(dones[batch_indices]),
                    torch.FloatTensor(log_probs[batch_indices]))
 
+    def get_random_minibatch(self, batch_size: int):
+        """Returns a single random mini-batch of specified size."""
+        if len(self.buffer) < batch_size:
+            batch_size = len(self.buffer)
+
+        index = np.random.randint(0, len(self.buffer)-batch_size)
+        batch = self.buffer[index:index+batch_size]
+        states, actions, rewards, next_states, dones, log_probs = zip(*batch)
+
+        return (torch.FloatTensor(np.array(states)),
+                torch.FloatTensor(np.array(actions)),
+                torch.FloatTensor(rewards),
+                torch.FloatTensor(np.array(next_states)),
+                torch.FloatTensor(dones),
+                torch.FloatTensor(log_probs))
+
     def clear(self):
         self.buffer.clear()
 
@@ -117,7 +133,7 @@ class PPOAgent:
                  output_dim,
                  actor_lr=3e-4, critic_lr=3e-4,
                  gamma=0.99, gae_lambda=0.95, epsilon=0.2,
-                 epochs=5, batch_size=128):
+                 epochs=1, batch_size=128):
 
         self.actor = ActorNetwork(input_dim, output_dim)
         self.critic = CriticNetwork(input_dim)
@@ -152,7 +168,7 @@ class PPOAgent:
 
         for _ in range(self.epochs):
             # Process data sequentially in batches
-            for states, actions, rewards, next_states, dones, old_log_probs in replay_buffer.get_batches(self.batch_size):
+            for states, actions, rewards, next_states, dones, old_log_probs in replay_buffer.get_random_minibatch(self.batch_size):
                 # Compute returns and advantages
                 with torch.no_grad():
                     next_values = self.critic(next_states).squeeze()

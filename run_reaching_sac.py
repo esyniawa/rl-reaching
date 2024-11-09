@@ -142,10 +142,6 @@ class SACAgent:
             self.alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=alpha_lr)
             self.alpha = self.log_alpha.exp()
 
-        # Action bounds
-        self.max_action = 1
-        self.min_action = -1
-
         # Device
         self.device = torch.device("cpu")
         self.actor = self.actor.to(self.device)
@@ -164,7 +160,7 @@ class SACAgent:
                 action, _ = self.actor.sample(state)
         return action.squeeze(0).numpy()
 
-    def update(self, replay_buffer, batch_size: int = 256):
+    def update(self, replay_buffer, batch_size: int = 128):
         # Sample from replay buffer
         state, action, reward, next_state, done = replay_buffer.sample(batch_size)
 
@@ -362,7 +358,7 @@ def train_sac(Agent: SACAgent,
               steps_per_trial: int = 400,
               trajectories_per_trial: int = 10,
               batch_size: int = 128,
-              num_updates: int = 5,
+              num_updates: int = 1,
               init_thetas: np.ndarray = np.radians((90, 90))) -> SACAgent:
     for trial in range(num_reaching_trials):
         # Initialize target for the environment
