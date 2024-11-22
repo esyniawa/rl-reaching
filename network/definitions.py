@@ -56,7 +56,8 @@ StriatumD1Neuron = ann.Neuron(
     """,
     equations="""
         tau*dmp/dt + mp = sum(mod) * (sum(exc) - sum(inh)) + noise*Uniform(-1.0,1.0) + baseline
-        r = pos(mp)
+        r = if (mp > 1.0): logistic(mp)
+            else: pos(mp)
     """
 )
 
