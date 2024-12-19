@@ -19,7 +19,7 @@ parameters['motor_step_size'] = abs(parameters['motor_orientations'][1] - parame
 parameters['shoulder_limits'] = np.array((parameters['theta_limit_low'], parameters['theta_limit_high']))
 parameters['elbow_limits'] = np.array((parameters['theta_limit_low'], parameters['theta_limit_high']))
 
-parameters['s1_step_size'] = 15.  # in [°]
+parameters['s1_step_size'] = 10.  # in [°]
 
 # TODO: check intersection with cartesian space
 parameters['state_s1'] = create_state_space(
@@ -48,8 +48,8 @@ parameters['state_pm'] = create_state_space(
 parameters['dim_pm'] = parameters['state_pm'].shape[:-1]
 
 # model definitions
-parameters['sig_s1'] = 60.  # in [°]
-parameters['sig_pm'] = 180.  # in [mm]
+parameters['sig_s1'] = 40.  # in [°]
+parameters['sig_pm'] = 160.  # in [mm]
 parameters['sig_m1'] = 30.  # in [°]
 
 parameters['dim_bg'] = parameters['dim_motor']

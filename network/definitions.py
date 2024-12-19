@@ -149,7 +149,7 @@ PreCovariance_inhibitory = ann.Synapse(
 DAPrediction = ann.Synapse(
     parameters="""
         tau = 200.0 : projection
-        threshold = 0.05 : projection
+        threshold = 0.1 : projection
    """,
    equations="""
        aux = if (post.mp>0): 1.0 else: 3.0
