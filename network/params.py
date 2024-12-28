@@ -50,7 +50,7 @@ parameters['dim_pm'] = parameters['state_pm'].shape[:-1]
 # model definitions
 parameters['sig_s1'] = 40.  # in [°]
 parameters['sig_pm'] = 160.  # in [mm]
-parameters['sig_m1'] = 30.  # in [°]
+parameters['sig_m1'] = 20.  # in [°]
 
 parameters['dim_bg'] = parameters['dim_motor']
 
