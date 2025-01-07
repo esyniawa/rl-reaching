@@ -9,7 +9,6 @@ from typing import Tuple, List
 import warnings
 from collections import deque
 import random
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 from kinematics.planar_arms import PlanarArms
@@ -577,7 +576,9 @@ if __name__ == "__main__":
 
     # import matplotlib if the error should be plotted
     if sim_args.do_plot:
+        import matplotlib
         import matplotlib.pyplot as plt
+        matplotlib.use('Agg')
 
     # save path
     save_path_training = f'results/training_sac_{sim_args.id}/'
@@ -596,7 +597,6 @@ if __name__ == "__main__":
     agent = SACAgent(input_dim=state_dim, output_dim=action_dim)
 
     replay_buffer = ReplayBuffer(capacity=sim_args.buffer_size)
-    # training loop TODO: make ajustments
     for trials in training_trials:
         print(f'Sim {sim_args.id}: Training for {trials}...')
         subfolder = f'model_{trials}/'
