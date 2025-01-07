@@ -101,13 +101,13 @@ ReversedSynapse = ann.Synapse(
 # DA_typ = 1  ==> D1 type  DA_typ = -1 ==> D2 type
 PostCovarianceNoThreshold = ann.Synapse(
     parameters="""
-        tau = 250.0 : projection
+        tau = 200.0 : projection
         tau_alpha = 100.0 : projection
         regularization_threshold = 0.7 : projection
         K_burst = 1.0 : projection
         K_dip = 0.4 : projection
         DA_type = 1 : projection
-        threshold_pre = 0.0 : projection
+        threshold_pre = 0.05 : projection
         threshold_post = 0.05 : projection
     """,
     equations="""
@@ -122,30 +122,6 @@ PostCovarianceNoThreshold = ann.Synapse(
     """
 )
 
-# Inhibitory synapses STRD1 -> SNr
-PreCovariance_inhibitory = ann.Synapse(
-    parameters="""
-        tau=100.0 : projection
-        tau_alpha=20.0 : projection
-        regularization_threshold = 0.4 : projection
-        K_burst = 1.0 : projection
-        K_dip = 0.4 : projection
-        DA_type = 1 : projection
-        threshold_pre = 0.05 : projection
-        threshold_post = 0.05 : projection
-        negterm = 1 : projection
-    """,
-    equations="""
-        tau_alpha*dalpha/dt + alpha = pos(-post.mp + regularization_threshold)
-        dopa_sum = 2.0*(post.sum(dopa) - baseline_dopa)
-        trace = pos(pre.r - mean(pre.r) - threshold_pre) * (mean(post.r) - post.r - threshold_post)
-        aux = if (trace>0): negterm else: 0
-        dopa_mod = if (DA_type*dopa_sum>0): DA_type*K_burst*dopa_sum else: aux*DA_type*K_dip*dopa_sum
-        delta = dopa_mod * trace - alpha * pos(mean(post.r) - post.r - threshold_post) : min = 0.0
-        tau*dw/dt = delta : min = 0.0
-    """
-)
-
 DAPrediction = ann.Synapse(
     parameters="""
         tau = 250.0 : projection
@@ -156,70 +132,4 @@ DAPrediction = ann.Synapse(
        delta = aux*pos(post.r - baseline_dopa)*pos(pre.r - mean(pre.r) - threshold)
        tau*dw/dt = delta : min = 0.0
    """
-)
-
-CorticalLearning = ann.Synapse(
-    parameters="""
-        tau = 10000. : projection
-        rho = 1. : projection
-        threshold_pre = 0.0 : projection
-    """,
-    equations="""
-        tau * dw/dt = pos(pre.r - threshold_pre) * post.r - rho * post.r
-    """,
-    description="STDP rule for inhibitory synapses introduced by Vogels et al. (2011)."
-)
-
-LearningMT = ann.Synapse(
-    parameters ="""
-        LearnTau = 1000. : projection
-        minweight = 0.0 : projection
-        alpha = 1.0 : projection
-    """,
-    equations = """            
-        LearnTau * dw/dt = (pre.r - mean(pre.r)) * post.r - alpha * post.r^2 * w : min = minweight, init = 0.0
-    """
-)
-
-NewAntihebb = ann.Synapse(
-    parameters ="""
-        TauAH = 10000. : projection
-        alpha = 1 : projection
-        gamma = 1 : projection
-        rho = 0.06 : projection        
-    """,
-    equations = """    
-        TauAH * dw/dt = pre.r * post.r - pre.r * rho * (gamma + alpha * w) : min = 0.0, init =0.0
-    """
-)
-
-MiehlExc = ann.Synapse(
-    parameters="""
-		tau_W = 10000 : projection
-        alpha = 0.5  : projection
-	""",
-    equations="""
-    	tau_W * dw/dt = pre.r * post.r * (post.r - alpha) : min = 0.0
-	""",
-)
-
-OjaLearningRule = ann.Synapse(
-    parameters="""
-    eta = 0.01 : projection
-    alpha = 1.0 : projection
-    """,
-    equations="""
-     dw/dt = eta * ( pre.r * post.r - alpha * post.r^2 * w ) : min=0.0
-    """
-)
-
-BCMLearningRule = ann.Synapse(
-    parameters = """
-        eta = 0.01 : projection
-        tau = 2000.0 : projection
-    """,
-    equations = """
-        tau * dtheta/dt + theta = post.r^2 : postsynaptic, exponential
-        dw/dt = eta * post.r * (post.r - theta) * pre.r : min=0.0, explicit
-    """
 )

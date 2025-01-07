@@ -22,10 +22,10 @@ StrD1 = ann.Population(geometry=parameters['dim_str'], neuron=StriatumD1Neuron, 
 StrD1.noise = 0.0
 
 SNr = ann.Population(geometry=parameters['dim_bg'], neuron=SNrNeuron, name='SNr', stop_condition='r<0.1')
-SNr.noise = 0.05
+SNr.noise = 0.025
 
 VL = ann.Population(geometry=parameters['dim_bg'], neuron=LinearNeuron, name='VL')
-VL.noise = 0.05
+VL.noise = 0.025
 VL.baseline = ann.get_constant('baseline_snr') - 0.065
 
 M1 = ann.Population(geometry=parameters['dim_bg'], neuron=LinearNeuron, name='M1')
