@@ -7,7 +7,6 @@ from copy import deepcopy
 import argparse
 from typing import Tuple, List
 import warnings
-from multiprocessing import Pool
 from collections import deque
 import random
 import matplotlib.pyplot as plt

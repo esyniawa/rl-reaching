@@ -1,7 +1,7 @@
 #!/bin/bash
 
-parallel=$1
-durchgaenge=$2
+parallel=1
+durchgaenge=$1
 
 # Function to convert seconds to days:hours:minutes format
 seconds_to_dhm() {
