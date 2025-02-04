@@ -77,12 +77,16 @@ DopamineNeuron = ann.Neuron(
         tau = 20.0 : population
         firing = 0 : population, bool
         factor_inh = 10.0 : population
+        error_threshold = 0.0 : population
     """,
     equations="""
-        s_inh = sum(inh)
-        aux = firing * pos(1.0 - s_inh) + (1-firing)*baseline_dopa  
-        tau*dmp/dt + mp =  aux
-        r = mp : min = 0.0
+        deviation = sum(target) + sum(snr_rates) - baseline_snr  # Compare CM output with SNr output
+        factor_da = if deviation >= error_threshold: 1.0 else: 0.0
+        mp = if firing:
+                factor_da * pos(1.0 - sum(inh_rpe)) + (1.0 - factor_da)*(baseline_dopa - factor_inh*deviation)  
+            else: 
+                baseline_dopa
+        tau*dr/dt + r =  pos(mp)
     """
 )
 
@@ -102,13 +106,13 @@ ReversedSynapse = ann.Synapse(
 PostCovarianceNoThreshold = ann.Synapse(
     parameters="""
         tau = 200.0 : projection
-        tau_alpha = 100.0 : projection
-        regularization_threshold = 0.7 : projection
+        tau_alpha = 1000.0 : projection
+        regularization_threshold = 0.9 : projection
         K_burst = 1.0 : projection
-        K_dip = 0.4 : projection
+        K_dip = 0.8 : projection
         DA_type = 1 : projection
         threshold_pre = 0.05 : projection
-        threshold_post = 0.05 : projection
+        threshold_post = 0.0 : projection
     """,
     equations="""
         tau_alpha*dalpha/dt + alpha = pos(post.mp - regularization_threshold)
@@ -117,15 +121,15 @@ PostCovarianceNoThreshold = ann.Synapse(
         condition_0 = if (trace>0.0) and (w >0.0): 1 else: 0
         dopa_mod =  if (DA_type*dopa_sum>0): DA_type*K_burst*dopa_sum
                     else: condition_0*DA_type*K_dip*dopa_sum
-        delta = dopa_mod * trace - alpha*pos(post.r - mean(post.r) - threshold_post) : min = 0.0
+        delta = dopa_mod * trace - alpha*pos(post.r - mean(post.r) - threshold_post)
         tau*dw/dt = delta : min = 0.0
     """
 )
 
 DAPrediction = ann.Synapse(
     parameters="""
-        tau = 250.0 : projection
-        threshold = 0.1 : projection
+        tau = 1000.0 : projection
+        threshold = 0.05 : projection
    """,
    equations="""
        aux = if (post.mp>0): 1.0 else: 3.0

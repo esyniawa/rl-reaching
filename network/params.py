@@ -90,7 +90,7 @@ parameters['pop_plot_types'] = {
     'CM': 'Plot',
     'VL': 'Plot',
     'M1': 'Plot',
-    'SNc': 'Line',
+    'SNc': 'Plot',
     'Output_Shoulder': 'Polar',
     'Output_Elbow': 'Polar',
 }
