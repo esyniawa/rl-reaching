@@ -58,6 +58,7 @@ def trial(input_pm: np.ndarray,
           t_sim: float,
           training: bool = True,
           reset: bool = True):
+
     if not training:
         ann.disable_learning()
     else:
@@ -66,9 +67,9 @@ def trial(input_pm: np.ndarray,
     # simulation state
     if t_wait > 0.:
         SNc.firing = 0
-        PM.baseline = 0
-        S1.baseline = 0
-        CM.baseline = 0
+        PM.baseline = 0.0
+        S1.baseline = 0.0
+        CM.baseline = 0.0
         ann.simulate(t_wait)
 
     # send reward and set inputs

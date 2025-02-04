@@ -14,12 +14,20 @@ if __name__ == '__main__':
                             default='random',
                             help='Testing condition for reaching')
     exp_parser.add_argument('--con_monitor', type=bool, default=False)
+    exp_parser.add_argument('--debug_mode', type=bool, default=False)
+    exp_parser.add_argument('--reaching_time', type=float, default=250.0)
     exp_parser.add_argument('--clean', type=bool, default=False, help='Clean ANNarchy compilation of the model')
     exp_parser.add_argument('--animate_arms', type=bool, default=False)
     exp_args = exp_parser.parse_args()
 
     # number of training trials
-    training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000)
+    if not exp_args.debug_mode:
+        training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000)
+        test_random_points = 100
+    else:
+        training_trials = (16_000,)
+        test_random_points = 250
+
     test_condition = exp_args.test_reach_condition
 
     # init angle of arms
@@ -54,6 +62,7 @@ if __name__ == '__main__':
         subfolder = f'model_{N_training_trials}/'
         training(N_trials=N_training_trials,
                  init_angle=init_angle,
+                 reward_time=exp_args.reaching_time,
                  save_path=folder + subfolder,
                  pop_monitor=PopMonitor_training,
                  con_monitor=ConMonitor_training,
@@ -63,20 +72,21 @@ if __name__ == '__main__':
 
         print(f'Sim {sim_id}: Testing ...')
         test_reach(init_angle=init_angle,
+                   movement_time=exp_args.reaching_time,
                    save_path=folder + subfolder,
                    pop_monitor=PopMonitor_testing,
                    test_condition=test_condition,
                    plot_error=True,
                    animate_populations=True,
                    arms_model=my_arms,
-                   num_random_points=100)
+                   num_random_points=test_random_points)
 
         if exp_args.animate_arms:
             my_arms.reset_all()
 
         if exp_args.test_pert:
             test_perturb(init_angle=init_angle,
-                         N_trials=100,
+                         N_trials=test_random_points,
                          save_path=folder + subfolder,
                          pop_monitor=PopMonitor_testing,
                          plot_error=True,
