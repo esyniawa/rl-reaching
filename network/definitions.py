@@ -68,7 +68,7 @@ SNrNeuron = ann.Neuron(
     """,
     equations="""
         tau*dmp/dt + mp = sum(exc) - sum(inh) + noise*Uniform(-1.0,1.0) + baseline_snr
-        r = mp : min = 0.0, init = baseline_snr
+        r = pos(mp) : init = baseline_snr
     """
 )
 
@@ -80,7 +80,7 @@ DopamineNeuron = ann.Neuron(
         error_threshold = 0.0 : population
     """,
     equations="""
-        deviation = sum(target) + sum(snr_rates) - baseline_snr  # Compare CM output with SNr output
+        deviation = sum(target) - sum(vl_rates)  # Compare CM output with SNr output
         factor_da = if deviation >= error_threshold: 1.0 else: 0.0
         mp = if firing:
                 factor_da * pos(1.0 - sum(inh_rpe)) + (1.0 - factor_da)*(baseline_dopa - factor_inh*deviation)  
@@ -105,7 +105,7 @@ ReversedSynapse = ann.Synapse(
 # DA_typ = 1  ==> D1 type  DA_typ = -1 ==> D2 type
 PostCovarianceNoThreshold = ann.Synapse(
     parameters="""
-        tau = 200.0 : projection
+        tau = 150.0 : projection
         tau_alpha = 1000.0 : projection
         regularization_threshold = 0.9 : projection
         K_burst = 1.0 : projection

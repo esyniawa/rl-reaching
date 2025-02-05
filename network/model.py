@@ -83,10 +83,10 @@ VL_M1.connect_one_to_one(weights=0.8)
 
 # error projections
 CM_SNc = ann.Projection(pre=CM, post=SNc, target='target')
-CM_SNc.connect_one_to_one(1.0)
+CM_SNc.connect_one_to_one(0.75)
 
-SNr_SNc = ann.Projection(pre=SNr, post=SNc, target='snr_rates')
-SNr_SNc.connect_one_to_one(1.0)
+VL_SNc = ann.Projection(pre=VL, post=SNc, target='vl_rates')
+VL_SNc.connect_one_to_one(1.0)
 
 # Output projection
 PopCode_shoulder = ann.Projection(pre=M1[:, 0], post=Output_Pop_Shoulder, target='exc')
@@ -130,6 +130,6 @@ for i, subset_key in enumerate(parameters['subsets_str']):
 # M1_M1.connect_from_matrix(wM1_M1)
 
 # laterals on the last dimension
-# StrD1_StrD1 = ann.Projection(pre=StrD1, post=StrD1, target='inh')
-# wD1_D1 = laterals_layerwise(Dim=StrD1.geometry, axis=2, weight=0.2, subset_dict=parameters['subsets_str'])
-# StrD1_StrD1.connect_from_matrix(wD1_D1)
+StrD1_StrD1 = ann.Projection(pre=StrD1, post=StrD1, target='inh')
+wD1_D1 = laterals_layerwise(Dim=StrD1.geometry, axis=2, weight=0.05, subset_dict=parameters['subsets_str'])
+StrD1_StrD1.connect_from_matrix(wD1_D1)
