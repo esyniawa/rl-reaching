@@ -88,6 +88,13 @@ PopCode_elbow = ann.Projection(pre=M1[:, 1], post=Output_Pop_Elbow, target='exc'
 w_out = pop_code_output(preferred_angles=parameters['motor_orientations'])
 PopCode_elbow.connect_from_matrix(w_out)
 
+# project output to the DA
+DA_Prediction_Shoulder = ann.Projection(pre=Output_Pop_Shoulder[0], post=SNc[0], target='out')
+DA_Prediction_Shoulder.connect_one_to_one(1.0)
+
+DA_Prediction_Elbow = ann.Projection(pre=Output_Pop_Elbow[0], post=SNc[1], target='out')
+DA_Prediction_Elbow.connect_one_to_one(1.0)
+
 # normalize PopCode
 PopCode_norm_shoulder = ann.Projection(pre=M1[:, 0], post=Output_Pop_Shoulder[0], target='norm')
 PopCode_norm_shoulder.connect_all_to_all(1.0)
