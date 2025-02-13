@@ -25,7 +25,7 @@ if __name__ == '__main__':
         training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000)
         test_random_points = 100
     else:
-        training_trials = (16_000,)
+        training_trials = (2_000, 6_000, 8_000)
         test_random_points = 250
 
     test_condition = exp_args.test_reach_condition

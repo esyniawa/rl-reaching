@@ -112,7 +112,6 @@ def train_position(current_thetas: np.ndarray,
                           t_sim=t_reward,
                           training=True)
 
-    print(out, new_thetas-current_thetas)
     # "movement"
     out += current_thetas
     return new_thetas, out, sim_time
