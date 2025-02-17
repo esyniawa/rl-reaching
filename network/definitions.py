@@ -105,7 +105,7 @@ ReversedSynapse = ann.Synapse(
 PostCovarianceNoThreshold = ann.Synapse(
     parameters="""
         tau = 200.0 : projection
-        tau_alpha = 500.0 : projection
+        tau_alpha = 1000.0 : projection
         regularization_threshold = 0.7 : projection
         K_burst = 1.0 : projection
         K_dip = 0.4 : projection
@@ -120,14 +120,14 @@ PostCovarianceNoThreshold = ann.Synapse(
         condition_0 = if (trace>0.0) and (w >0.0): 1 else: 0
         dopa_mod =  if (DA_type*dopa_sum>0): DA_type*K_burst*dopa_sum
                     else: condition_0*DA_type*K_dip*dopa_sum
-        delta = dopa_mod * trace - alpha*pos(post.r - mean(post.r) - threshold_post) : min = 0.0
+        delta = dopa_mod * trace - alpha*pos(post.r - mean(post.r) - threshold_post)
         tau*dw/dt = delta : min = 0.0
     """
 )
 
 DAPrediction = ann.Synapse(
     parameters="""
-        tau = 1000.0 : projection
+        tau = 5000.0 : projection
         threshold = 0.1 : projection
    """,
    equations="""
