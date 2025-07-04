@@ -8,7 +8,7 @@ parameters = {}
 parameters['moving_arm'] = 'right'
 
 # for motor space
-parameters['dim_motor'] = (22, 2)
+parameters['dim_motor'] = (26, 2)
 
 parameters['theta_limit_low'], parameters['theta_limit_high'] = -10, 170
 parameters['motor_orientations'] = np.linspace(-180, 180, parameters['dim_motor'][0], endpoint=True)
