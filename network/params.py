@@ -8,7 +8,7 @@ parameters = {}
 parameters['moving_arm'] = 'right'
 
 # for motor space
-parameters['dim_motor'] = (26, 2)
+parameters['dim_motor'] = (22, 2)
 
 parameters['theta_limit_low'], parameters['theta_limit_high'] = -10, 170
 parameters['motor_orientations'] = np.linspace(-180, 180, parameters['dim_motor'][0], endpoint=True)
@@ -49,8 +49,8 @@ parameters['dim_pm'] = parameters['state_pm'].shape[:-1]
 
 # model definitions
 parameters['sig_s1'] = 50.  # in [°]
-parameters['sig_pm'] = 160.  # in [mm]
-parameters['sig_m1'] = 15.  # in [°]
+parameters['sig_pm'] = 150.  # in [mm]
+parameters['sig_m1'] = 20.  # in [°]
 
 parameters['dim_bg'] = parameters['dim_motor']
 

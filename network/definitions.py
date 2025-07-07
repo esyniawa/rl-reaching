@@ -55,6 +55,7 @@ StriatumD1Neuron = ann.Neuron(
         noise = 0.0 : population
     """,
     equations="""
+        feedback = sum(target)
         tau*dmp/dt + mp = sum(mod) * (sum(exc) - sum(inh)) + noise*Uniform(-1.0,1.0) + baseline
         r = if (mp > 1.0): logistic(mp)
             else: pos(mp)
@@ -77,10 +78,11 @@ DopamineNeuron = ann.Neuron(
         tau = 20.0 : population
         firing = 0 : population, bool
         factor_inh = 10.0 : population
+        rate = 0.0
     """,
     equations="""
         s_inh = sum(inh)
-        aux = firing * pos(1.0 - s_inh) + (1-firing)*baseline_dopa  
+        aux = firing * pos(rate - s_inh) + (1-firing)*baseline_dopa  
         tau*dmp/dt + mp =  aux
         r = mp : min = 0.0
     """
@@ -98,26 +100,19 @@ ReversedSynapse = ann.Synapse(
     description="Higher pre-synaptic activity lowers the synaptic transmission and vice versa."
 )
 
-# DA_typ = 1  ==> D1 type  DA_typ = -1 ==> D2 type
-PostCovarianceNoThreshold = ann.Synapse(
+PostDeltaRule = ann.Synapse(
     parameters="""
-        tau = 200.0 : projection
-        tau_alpha = 100.0 : projection
-        regularization_threshold = 0.7 : projection
-        K_burst = 1.0 : projection
-        K_dip = 0.4 : projection
-        DA_type = 1 : projection
-        threshold_pre = 0.05 : projection
-        threshold_post = 0.05 : projection
+        tau = 100.0 : projection
+        lr = 1.0 : projection
     """,
     equations="""
-        tau_alpha*dalpha/dt + alpha = pos(post.mp - regularization_threshold)
-        dopa_sum = 2.0*(post.sum(dopa) - baseline_dopa)
-        trace = pos(post.r -  mean(post.r) - threshold_post) * (pre.r - threshold_pre)
-        condition_0 = if (trace>0.0) and (w >0.0): 1 else: 0
-        dopa_mod =  if (DA_type*dopa_sum>0): DA_type*K_burst*dopa_sum
-                    else: condition_0*DA_type*K_dip*dopa_sum
-        delta = dopa_mod * trace - alpha*pos(post.r - mean(post.r) - threshold_post) : min = 0.0
+        # dopamine modulation of learning rate
+        dopa_signal = post.sum(dopa) - baseline_dopa: min = 0.0
+        
+        # Delta rule: delta w = lr * error * input
+        error = post.feedback - post.r
+        delta = lr * dopa_signal * error * pre.r
+
         tau*dw/dt = delta : min = 0.0
     """
 )

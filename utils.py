@@ -85,6 +85,24 @@ def norm_distance(distance: np.ndarray,
     return np.array([normalized_dx, normalized_dy])
 
 
+def reaching_error(target_thetas: np.ndarray,
+                   output_thetas: np.ndarray,
+                   sigma: float = 35.0,
+                   debug: bool = False) -> float:
+    # Calculate the reward based on the error between target and current positions
+    from network.params import parameters
+
+    # Calculate the reaching error
+    error = (PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=target_thetas, radians=False, check_limits=False)[:, -1] -
+             PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=output_thetas, radians=False, check_limits=False)[:, -1])
+
+    error = np.exp(-0.5 * (np.linalg.norm(error) / sigma) ** 2)
+    if debug:
+        print("Target Thetas:", target_thetas, "Current Thetas:", output_thetas)
+        print("Reaching Error:", error)
+    return error
+
+
 def safe_save(save_name: str, array: np.ndarray) -> None:
     """
     If a folder is specified and does not yet exist, it will be created automatically.
@@ -166,3 +184,4 @@ if __name__ == '__main__':
         distance = target_xy - current_pos
 
         print(norm_distance(distance), distance)
+

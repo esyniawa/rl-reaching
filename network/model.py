@@ -10,7 +10,7 @@ PM = ann.Population(geometry=parameters['dim_pm'], neuron=BaselineNeuron, name='
 PM.tau_up = 30.
 S1 = ann.Population(geometry=parameters['dim_s1'], neuron=BaselineNeuron, name='S1')
 
-SNc = ann.Population(geometry=2, neuron=DopamineNeuron, name='SNc')
+SNc = ann.Population(geometry=1, neuron=DopamineNeuron, name='SNc')
 
 # transmission populations into putamen
 CM = ann.Population(geometry=parameters['dim_motor'], neuron=BaselineNeuron, name='CM')
@@ -45,14 +45,14 @@ M1_StrD1 = {}
 w_M1_str = w_one_to_ones(preDim=parameters['dim_motor'][0], postDim=tuple(list(parameters['dim_s1']) + [parameters['dim_motor'][0]]), weight=parameters['strength_m1'])
 for i, subset_key in enumerate(parameters['subsets_str']):
     interval = parameters['subsets_str'][subset_key]
-    M1_StrD1[subset_key] = ann.Projection(pre=M1[:, i], post=StrD1[:, :, interval[0]:interval[1]], target='exc', name=f"CM_StrD1_{subset_key}")
+    M1_StrD1[subset_key] = ann.Projection(pre=M1[:, i], post=StrD1[:, :, interval[0]:interval[1]], target='target', name=f"CM_StrD1_{subset_key}")
     M1_StrD1[subset_key].connect_from_matrix(w_M1_str)
 
 S1_StrD1 = ann.Projection(pre=S1, post=StrD1, target='mod')
 w_s1 = w_2D_to_3D_S1(preDim=parameters['dim_s1'], postDim=StrD1.geometry)
 S1_StrD1.connect_from_matrix(w_s1)
 
-PM_StrD1 = ann.Projection(pre=PM, post=StrD1, target='exc', synapse=PostCovarianceNoThreshold, name='PM_D1')
+PM_StrD1 = ann.Projection(pre=PM, post=StrD1, target='exc', synapse=PostDeltaRule, name='PM_D1')
 PM_StrD1.connect_all_to_all(0.0)
 
 StrD1_SNr = {}
@@ -96,12 +96,12 @@ PopCode_norm_elbow = ann.Projection(pre=M1[:, 1], post=Output_Pop_Elbow[0], targ
 PopCode_norm_elbow.connect_all_to_all(1.0)
 
 # Reward prediction
-StrD1_SNc = {}
-for i, subset_key in enumerate(parameters['subsets_str']):
-    interval = parameters['subsets_str'][subset_key]
-    StrD1_SNc[subset_key] = ann.Projection(pre=StrD1[:, :, interval[0]:interval[1]], post=SNc[i],
-                                           target='inh', name=f'D1_SNc_{subset_key}', synapse=DAPrediction)
-    StrD1_SNc[subset_key].connect_all_to_all(0.0)
+# StrD1_SNc = {}
+# for i, subset_key in enumerate(parameters['subsets_str']):
+#     interval = parameters['subsets_str'][subset_key]
+#     StrD1_SNc[subset_key] = ann.Projection(pre=StrD1[:, :, interval[0]:interval[1]], post=SNc[i],
+#                                            target='inh', name=f'D1_SNc_{subset_key}', synapse=DAPrediction)
+#     StrD1_SNc[subset_key].connect_all_to_all(0.0)
 
 # Laterals
 # SNr_SNr = ann.Projection(pre=SNr, post=SNr, target='exc', synapse=ReversedSynapse)

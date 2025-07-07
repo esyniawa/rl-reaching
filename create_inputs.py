@@ -6,7 +6,7 @@ from network.utils import bivariate_gauss, circ_gauss, gauss
 from network.model import *
 
 from kinematics.planar_arms import PlanarArms
-from utils import generate_random_coordinate
+from utils import generate_random_coordinate, reaching_error
 
 
 def make_inputs(current_angles: np.ndarray,
@@ -56,7 +56,10 @@ def trial(input_pm: np.ndarray,
           input_cm: np.ndarray | None,
           t_wait: float,
           t_sim: float,
+          t_reward: float,
           training: bool = True,
+          target_thetas: np.ndarray | None = None,
+          current_thetas: np.ndarray | None = None,
           reset: bool = True):
 
     if not training:
@@ -73,15 +76,22 @@ def trial(input_pm: np.ndarray,
         ann.simulate(t_wait)
 
     # send reward and set inputs
-    if training:
-        SNc.firing = 1
     PM.baseline = input_pm
     S1.baseline = input_s1
     if input_cm is not None:
         CM.baseline = input_cm
     sim_time = ann.simulate_until(t_sim, population=SNr)
-
     out = np.array((Output_Pop_Shoulder.r[0], Output_Pop_Elbow.r[0]))
+
+    if training:
+        # "movement"
+        out += current_thetas
+
+        # add error
+        SNc.firing = 1
+        SNc.rate = reaching_error(target_thetas=target_thetas,
+                                  output_thetas=out, )
+        sim_time += ann.simulate_until(t_reward, population=SNr)
 
     # reset
     if reset:
@@ -104,11 +114,12 @@ def train_position(current_thetas: np.ndarray,
                           input_s1=base_s1,
                           input_cm=base_m1,
                           t_wait=t_wait,
-                          t_sim=t_reward,
+                          t_sim=50,
+                          t_reward=t_reward,
+                          target_thetas=new_thetas,
+                          current_thetas=current_thetas,
                           training=True)
 
-    # "movement"
-    out += current_thetas
     return new_thetas, out, sim_time
 
 
@@ -123,10 +134,12 @@ def train_fixed_position(current_thetas: np.ndarray,
                           input_s1=base_s1,
                           input_cm=base_m1,
                           t_wait=t_wait,
-                          t_sim=t_reward,
+                          t_sim=50,
+                          t_reward=t_reward,
+                          target_thetas=new_thetas,
+                          current_thetas=current_thetas,
                           training=True)
-    # "movement"
-    out += current_thetas
+
     return new_thetas, out, sim_time
 
 
@@ -146,6 +159,7 @@ def test_movement(current_thetas: np.ndarray,
                                    input_cm=None,
                                    t_wait=t_wait,
                                    t_sim=t_movement,
+                                   t_reward=0.,
                                    training=False)
 
     # "movement"
@@ -186,6 +200,7 @@ def test_perturbation(current_thetas: np.ndarray,
                                        input_cm=None,
                                        t_wait=t_wait,
                                        t_sim=t_init,
+                                       t_reward=0.,
                                        training=False,
                                        reset=False)
 
@@ -194,6 +209,7 @@ def test_perturbation(current_thetas: np.ndarray,
                                        input_cm=None,
                                        t_wait=0.,
                                        t_sim=t_movement,
+                                       t_reward=0.,
                                        training=False)
 
     output_theta_1 += current_thetas
