@@ -1,10 +1,7 @@
-import numpy as np
-
 from network.model import *
 from monitoring import PopMonitor
 
 from experiments import check_gain
-from utils import generate_random_coordinate
 
 import argparse
 import matplotlib.pyplot as plt

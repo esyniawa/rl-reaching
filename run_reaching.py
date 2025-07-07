@@ -15,14 +15,14 @@ if __name__ == '__main__':
                             help='Testing condition for reaching')
     exp_parser.add_argument('--con_monitor', type=bool, default=False)
     exp_parser.add_argument('--debug_mode', type=bool, default=False)
-    exp_parser.add_argument('--reaching_time', type=float, default=200.0)
+    exp_parser.add_argument('--reaching_time', type=float, default=150.0)
     exp_parser.add_argument('--clean', type=bool, default=False, help='Clean ANNarchy compilation of the model')
     exp_parser.add_argument('--animate_arms', type=bool, default=False)
     exp_args = exp_parser.parse_args()
 
     # number of training trials
     if not exp_args.debug_mode:
-        training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 64_000)
+        training_trials = (1_000, 2_000, 4_000, 8_000, 16_000, 32_000,)
         test_random_points = 100
     else:
         training_trials = (16_000,)

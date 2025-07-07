@@ -160,10 +160,9 @@ def test_movement(current_thetas: np.ndarray,
                                    t_wait=t_wait,
                                    t_sim=t_movement,
                                    t_reward=0.,
+                                   current_thetas=current_thetas,
                                    training=False)
 
-    # "movement"
-    output_theta += current_thetas
     output_theta = PlanarArms.clip_values(output_theta, radians=False)
     if arms_model is not None:
         arms_model.change_angle(arm='right', new_thetas=output_theta, radians=False)
@@ -175,7 +174,7 @@ def test_perturbation(current_thetas: np.ndarray,
                       point_to_reach: np.ndarray,
                       perturbation_shoulder: float | None = None,
                       perturbation_elbow: float | None = None,
-                      scale_pm: float = 2.0,
+                      scale_pm: float = 1.0,
                       scale_s1: float = 1.0,
                       t_init: float = 100.,
                       t_movement: float = 400.,
@@ -198,6 +197,7 @@ def test_perturbation(current_thetas: np.ndarray,
     sim_time_1, output_theta_1 = trial(input_pm=input_pm_init * scale_pm,
                                        input_s1=input_s1_init * scale_s1,
                                        input_cm=None,
+                                       current_thetas=current_thetas,
                                        t_wait=t_wait,
                                        t_sim=t_init,
                                        t_reward=0.,
@@ -207,17 +207,15 @@ def test_perturbation(current_thetas: np.ndarray,
     sim_time_2, output_theta_2 = trial(input_pm=input_pm_init * scale_pm,
                                        input_s1=input_s1 * scale_s1,
                                        input_cm=None,
+                                       current_thetas=output_theta_1,
                                        t_wait=0.,
                                        t_sim=t_movement,
                                        t_reward=0.,
                                        training=False)
 
-    output_theta_1 += current_thetas
+
     output_theta_1 = PlanarArms.clip_values(output_theta_1, radians=False)
-
-    output_theta_2 += current_thetas
     output_theta_2 = PlanarArms.clip_values(output_theta_2, radians=False)
-
     if arms_model is not None:
         arms_model.change_angle(arm=parameters['moving_arm'], new_thetas=current_thetas, radians=False, num_iterations=int(t_init))
         arms_model.change_angle(arm=parameters['moving_arm'], new_thetas=output_theta_2, radians=False, num_iterations=int(t_movement))

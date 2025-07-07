@@ -87,7 +87,7 @@ def norm_distance(distance: np.ndarray,
 
 def reaching_error(target_thetas: np.ndarray,
                    output_thetas: np.ndarray,
-                   sigma: float = 35.0,
+                   sigma: float = 40.0,
                    debug: bool = False) -> float:
     # Calculate the reward based on the error between target and current positions
     from network.params import parameters
