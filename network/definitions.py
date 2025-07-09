@@ -103,12 +103,12 @@ ReversedSynapse = ann.Synapse(
 PostDeltaRule = ann.Synapse(
     parameters="""
         tau = 100.0 : projection
-        learning_rate = 2.0 : projection
+        learning_rate = 1.5 : projection
         decay_rate = 1.0 : projection
     """,
     equations="""
         # dopamine modulation of learning rate
-        dopa_signal = post.sum(dopa) - baseline_dopa: min = 0.0
+        dopa_signal = post.sum(dopa) - baseline_dopa
         
         # Delta rule: delta w = lr * error * input
         error = post.feedback - post.r

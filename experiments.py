@@ -6,6 +6,7 @@ from create_inputs import (train_position,
                            test_movement,
                            test_perturbation,
                            generate_random_coordinate)
+
 from utils import safe_save
 from kinematics.planar_arms import PlanarArms
 

@@ -87,15 +87,14 @@ def norm_distance(distance: np.ndarray,
 
 def reaching_error(target_thetas: np.ndarray,
                    output_thetas: np.ndarray,
-                   sigma: float = 40.0,
+                   sigma: float = parameters['rpe_motor'],
                    debug: bool = False) -> float:
-    # Calculate the reward based on the error between target and current positions
-    from network.params import parameters
 
     # Calculate the reaching error
-    error = (PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=target_thetas, radians=False, check_limits=False)[:, -1] -
-             PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=output_thetas, radians=False, check_limits=False)[:, -1])
+    point_1 = PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=target_thetas, radians=False, check_limits=False)[:, -1]
+    point_2 = PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=output_thetas, radians=False, check_limits=False)[:, -1]
 
+    error = point_1 - point_2
     error = np.exp(-0.5 * (np.linalg.norm(error) / sigma) ** 2)
     if debug:
         print("Target Thetas:", target_thetas, "Current Thetas:", output_thetas)
@@ -172,16 +171,13 @@ def analyze_performance(test_results: dict, save_path: str | None = None, print_
 
 
 if __name__ == '__main__':
-    target_thetas, target_xy = generate_random_coordinate()
-    current_thetas = np.radians((90., 90.))
+    # error check
+    N = 50
 
-    for _ in range(1000):
-        current_thetas += np.random.normal(loc=0.0, scale=0.1, size=2)
-        current_thetas = PlanarArms.clip_values(current_thetas, radians=True)
-        current_pos = PlanarArms.forward_kinematics(arm=parameters['moving_arm'],
-                                                    thetas=current_thetas,
-                                                    radians=True)[:, -1]
-        distance = target_xy - current_pos
-
-        print(norm_distance(distance), distance)
+    # generate random thetas
+    for _ in range(N):
+        theta, _ = generate_random_coordinate()
+        noise_theta = theta + np.random.normal(loc=0, scale=5, size=2)
+        print(f"Original: {theta}, Noisy: {noise_theta}")
+        print(f"Reaching Error: {reaching_error(theta, noise_theta)}")
 

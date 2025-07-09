@@ -123,6 +123,8 @@ class PlanarArms:
             theta1, theta2 = PlanarArms.check_values(thetas, radians)
         else:
             theta1, theta2 = thetas
+            if not radians:
+                theta1, theta2 = np.radians(thetas)
 
         if arm == 'right':
             const = 1

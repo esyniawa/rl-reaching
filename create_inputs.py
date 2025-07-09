@@ -83,10 +83,10 @@ def trial(input_pm: np.ndarray,
     sim_time = ann.simulate_until(t_sim, population=SNr)
     out = np.array((Output_Pop_Shoulder.r[0], Output_Pop_Elbow.r[0]))
 
-    if training:
-        # "movement"
-        out += current_thetas
+    # "movement"
+    out += current_thetas
 
+    if training:
         # add error
         SNc.firing = 1
         SNc.rate = reaching_error(target_thetas=target_thetas,
