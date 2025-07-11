@@ -108,7 +108,7 @@ PostDeltaRule = ann.Synapse(
     """,
     equations="""
         # dopamine modulation of learning rate
-        dopa_signal = post.sum(dopa) - baseline_dopa
+        dopa_signal = post.sum(dopa) - baseline_dopa : min = 0.0
         
         # Delta rule: delta w = lr * error * input
         error = post.feedback - post.r
