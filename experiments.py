@@ -31,6 +31,7 @@ def training(N_trials: int,
              wait_time: int = 50,
              pop_monitor: PopMonitor | None = None,
              con_monitor: ConMonitor | None = None,
+             disable_transmission_during_training: bool = False,
              save_synapses: bool = False,
              animate_populations: bool = False,
              plot_error: bool = False) -> None:
@@ -40,8 +41,9 @@ def training(N_trials: int,
     if save_path[-1] != '/':
         save_path += '/'
 
-    # disable transmission
-    disable_transmission()
+    if disable_transmission_during_training:
+        # disable transmission
+        disable_transmission()
 
     # initialize monitors
     if pop_monitor is not None:
@@ -113,6 +115,7 @@ def training_fix_points(points: list[np.ndarray],
                         wait_time: int = 50,
                         pop_monitor: PopMonitor | None = None,
                         con_monitor: ConMonitor | None = None,
+                        disable_transmission_during_training: bool = False,
                         save_synapses: bool = False,
                         animate_populations: bool = False) -> None:
     # look for possible errors
@@ -122,8 +125,9 @@ def training_fix_points(points: list[np.ndarray],
         save_path += '/'
     assert init_angle.size == 2, 'init_angle must be a 2D array'
 
-    # disable transmission
-    disable_transmission()
+    if disable_transmission_during_training:
+        # disable transmission
+        disable_transmission()
 
     # initialize monitors
     if pop_monitor is not None:
