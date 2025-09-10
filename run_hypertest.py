@@ -60,6 +60,7 @@ def update_reaching_space(parameters: dict,
 
 def objective(trial: optuna.Trial,
               study_name: str,
+              feedback: bool,
               n_training_trials: int = 8_000,
               n_test_trials: int = 250,
               reward_time: int = 150,
@@ -91,6 +92,7 @@ def objective(trial: optuna.Trial,
                  init_angle=np.array([90., 90.]),
                  reward_time=reward_time,
                  save_path=save_path,
+                 disable_transmission_during_training=not feedback,
                  pop_monitor=None,
                  con_monitor=None,
                  animate_populations=False,
@@ -128,8 +130,9 @@ def objective(trial: optuna.Trial,
         return float('inf')
 
 
-def run_optimization(n_hyper_trials: int = 100,
-                     study_name: str = "hyperparameter_optimization_default") -> optuna.Study:
+def run_optimization(n_hyper_trials: int,
+                     feedback: bool,
+                     study_name: str) -> optuna.Study:
 
     storage = f"sqlite:///results/{study_name}/optuna_trials/trials.db"
 
@@ -144,7 +147,7 @@ def run_optimization(n_hyper_trials: int = 100,
 
     # Create objective function with only required arguments
     from functools import partial
-    objective_partial = partial(objective, study_name=study_name)
+    objective_partial = partial(objective, study_name=study_name, feedback=feedback)
 
     # Run optimization sequentially
     study.optimize(
@@ -176,6 +179,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_trials', type=int, default=100)
     parser.add_argument('--sim_id', type=int, default=0, help='Simulation ID')
     parser.add_argument('--study_name', type=str, default="default_model")
+    parser.add_argument('--feedback', type=bool, default=True, help='Whether VL -> M1 is active or not.')
     args = parser.parse_args()
 
     # smaller peripersonal reaching space for hyperparameter optimization
