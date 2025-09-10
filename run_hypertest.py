@@ -1,9 +1,11 @@
 import numpy as np
 import pandas as pd
+import ANNarchy as ann
 
 from experiments import training, test_reach
 from network.params import parameters
-from network.model import *
+from network.model import PM_StrD1
+
 import optuna
 from optuna.samplers import TPESampler
 import os
@@ -16,6 +18,7 @@ def update_model_params(sigma_s1: float = 25.,
                         lr: float = 1.0,
                         decay: float = 1.0,
                         ):
+
     parameters['rpe_motor'] = rpe_error  # in [mm]
     parameters['sig_s1'] = sigma_s1  # in [°]
     parameters['sig_pm'] = sigma_pm  # in [mm]
@@ -37,8 +40,7 @@ def define_parameter_bounds() -> dict[str, tuple[float, float]]:
     }
 
 
-def update_reaching_space(parameters: dict,
-                          x_bounds: tuple[float, float],
+def update_reaching_space(x_bounds: tuple[float, float],
                           y_bounds: tuple[float, float], ):
     from network.utils import create_state_space
 
@@ -61,7 +63,7 @@ def update_reaching_space(parameters: dict,
 def objective(trial: optuna.Trial,
               study_name: str,
               feedback: bool,
-              n_training_trials: int = 16_000,
+              n_training_trials: int = 8_000,
               n_test_trials: int = 250,
               reward_time: int = 150,
               reach_time: int = 150,
@@ -148,7 +150,7 @@ def run_optimization(n_hyper_trials: int,
         sampler=TPESampler()
     )
 
-    # Create objective function with only required arguments
+    # Create objective function
     from functools import partial
     objective_partial = partial(objective, study_name=study_name, feedback=feedback)
 
@@ -184,11 +186,8 @@ if __name__ == '__main__':
     parser.add_argument('--feedback', type=bool, default=True, help='Whether VL -> M1 is active or not.')
     args = parser.parse_args()
 
-    # smaller peripersonal reaching space for hyperparameter optimization
-    # parameters = update_reaching_space(parameters, x_bounds=(-150, 100), y_bounds=(50, 250))
-    # reimport
-    # from network.model import *
-    # from experiments import training, test_reach
+    # smaller peripersonal reaching space for hyperparameter optimization (doesn't work due to ANNarchy)
+    # update_reaching_space(x_bounds=(-150, 100), y_bounds=(50, 250))
 
     study_name = args.study_name + f'_sim_{args.sim_id}'
 

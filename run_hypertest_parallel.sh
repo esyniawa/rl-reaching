@@ -3,7 +3,7 @@
 # Configuration
 PARALLEL_JOBS=4                    # Number of parallel jobs
 N_TRIALS=100                       # Number of trials per job
-STUDY_NAME="default_model"         # Study name
+STUDY_NAME="small_model"           # Study name
 
 # Record start time
 START_TIME=$(date +%s)

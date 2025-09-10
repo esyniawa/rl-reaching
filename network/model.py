@@ -8,6 +8,7 @@ ann.setup(num_threads=8)
 # input populations
 PM = ann.Population(geometry=parameters['dim_pm'], neuron=BaselineNeuron, name='PM')
 PM.tau_up = 30.
+
 S1 = ann.Population(geometry=parameters['dim_s1'], neuron=BaselineNeuron, name='S1')
 
 SNc = ann.Population(geometry=1, neuron=DopamineNeuron, name='SNc')

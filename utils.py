@@ -4,19 +4,18 @@ from network.params import parameters
 from kinematics.planar_arms import PlanarArms
 
 
-def generate_random_coordinate(theta_bounds_lower: float = parameters['theta_limit_low'],
-                               theta_bounds_upper: float = parameters['theta_limit_high'],
-                               x_bounds: tuple[float, float] = parameters['x_reaching_space_limits'],
-                               y_bounds: tuple[float, float] = parameters['y_reaching_space_limits'],
-                               clip_borders_theta: float = 10.,
+def generate_random_coordinate(clip_borders_theta: float = 10.,
                                clip_borders_xy: float = 10.,
                                init_thetas: np.ndarray | None = None,
                                return_thetas_radians: bool = False) -> tuple[np.ndarray, np.ndarray]:
 
+    x_bounds = parameters['x_reaching_space_limits']
+    y_bounds = parameters['y_reaching_space_limits']
+
     valid = False
     while not valid:
-        random_thetas = np.random.uniform(low=theta_bounds_lower + clip_borders_theta,
-                                          high=theta_bounds_upper - clip_borders_theta,
+        random_thetas = np.random.uniform(low=parameters['theta_limit_low'] + clip_borders_theta,
+                                          high=parameters['theta_limit_high'] - clip_borders_theta,
                                           size=2)
 
         random_xy = PlanarArms.forward_kinematics(arm=parameters['moving_arm'],
@@ -43,12 +42,10 @@ def generate_random_coordinate(theta_bounds_lower: float = parameters['theta_lim
 
 
 def norm_xy(xy: np.ndarray,
-            x_bounds: tuple[float, float] = parameters['x_reaching_space_limits'],
-            y_bounds: tuple[float, float] = parameters['y_reaching_space_limits'],
             clip_borders_xy: float = 10.) -> np.ndarray:
 
-    x_bounds = (x_bounds[0] + clip_borders_xy, x_bounds[1] - clip_borders_xy)
-    y_bounds = (y_bounds[0] + clip_borders_xy, y_bounds[1] - clip_borders_xy)
+    x_bounds = (parameters['x_reaching_space_limits'][0] + clip_borders_xy, parameters['x_reaching_space_limits'][1] - clip_borders_xy)
+    y_bounds = (parameters['y_reaching_space_limits'][0] + clip_borders_xy, parameters['y_reaching_space_limits'][1] - clip_borders_xy)
 
     # Calculate the midpoints of x and y ranges
     x_mid = (x_bounds[0] + x_bounds[1]) / 2
@@ -66,13 +63,11 @@ def norm_xy(xy: np.ndarray,
 
 
 def norm_distance(distance: np.ndarray,
-                  x_bounds: tuple[float, float] = parameters['x_reaching_space_limits'],
-                  y_bounds: tuple[float, float] = parameters['y_reaching_space_limits'],
                   clip_borders_xy: float = 10.
                   ) -> np.ndarray:
 
-    x_bounds = (x_bounds[0] + clip_borders_xy, x_bounds[1] - clip_borders_xy)
-    y_bounds = (y_bounds[0] + clip_borders_xy, y_bounds[1] - clip_borders_xy)
+    x_bounds = (parameters['x_reaching_space_limits'][0] + clip_borders_xy, parameters['x_reaching_space_limits'][1] - clip_borders_xy)
+    y_bounds = (parameters['y_reaching_space_limits'][0] + clip_borders_xy, parameters['y_reaching_space_limits'][1] - clip_borders_xy)
 
     # Calculate x and y ranges
     x_range = abs(x_bounds[1] - x_bounds[0])
@@ -87,7 +82,6 @@ def norm_distance(distance: np.ndarray,
 
 def reaching_error(target_thetas: np.ndarray,
                    output_thetas: np.ndarray,
-                   sigma: float = parameters['rpe_motor'],
                    debug: bool = False) -> float:
 
     # Calculate the reaching error
@@ -95,7 +89,7 @@ def reaching_error(target_thetas: np.ndarray,
     point_2 = PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=output_thetas, radians=False, check_limits=False)[:, -1]
 
     error = point_1 - point_2
-    error = np.exp(-0.5 * (np.linalg.norm(error) / sigma) ** 2)
+    error = np.exp(-0.5 * (np.linalg.norm(error) / parameters['rpe_motor']) ** 2)
     if debug:
         print("Target Thetas:", target_thetas, "Current Thetas:", output_thetas)
         print("Reaching Error:", error)

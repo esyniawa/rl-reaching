@@ -33,8 +33,8 @@ parameters['state_s1'] = create_state_space(
 parameters['dim_s1'] = parameters['state_s1'].shape[:-1]
 
 # for cartesian space in PM
-parameters['x_reaching_space_limits'] = (-300, 200)
-parameters['y_reaching_space_limits'] = (0, 360)
+parameters['x_reaching_space_limits'] = (-150, 100)  #(-300, 200)
+parameters['y_reaching_space_limits'] = (50, 250)  #(0, 360)
 
 parameters['x_step_size'] = 20.
 parameters['y_step_size'] = 20.
