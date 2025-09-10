@@ -134,7 +134,10 @@ def run_optimization(n_hyper_trials: int,
                      feedback: bool,
                      study_name: str) -> optuna.Study:
 
-    storage = f"sqlite:///results/{study_name}/optuna_trials/trials.db"
+    optuna_dir = f"results/{study_name}/optuna_trials/"
+    os.makedirs(optuna_dir, exist_ok=True)
+
+    storage = f"sqlite:///{optuna_dir}trials.db"
 
     # Create study using Optuna's built-in storage
     study = optuna.create_study(
@@ -164,9 +167,8 @@ def run_optimization(n_hyper_trials: int,
 
     # Save best parametersargs.data_set
     best_params_df = pd.DataFrame([study.best_params])
-    os.makedirs(f'results/{study_name}/optuna_trials/', exist_ok=True)
     best_params_df.to_csv(
-        os.path.join(f'results/{study_name}/optuna_trials/', 'best_params.csv'),
+        os.path.join(optuna_dir, 'best_params.csv'),
         index=False
     )
 
