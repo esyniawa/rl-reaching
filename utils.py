@@ -87,7 +87,6 @@ def norm_distance(distance: np.ndarray,
 
 def reaching_error(target_thetas: np.ndarray,
                    output_thetas: np.ndarray,
-                   sigma: float = parameters['rpe_motor'],
                    debug: bool = False) -> float:
 
     # Calculate the reaching error
@@ -95,7 +94,7 @@ def reaching_error(target_thetas: np.ndarray,
     point_2 = PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=output_thetas, radians=False, check_limits=False)[:, -1]
 
     error = point_1 - point_2
-    error = np.exp(-0.5 * (np.linalg.norm(error) / sigma) ** 2)
+    error = np.exp(-0.5 * (np.linalg.norm(error) / parameters['rpe_motor']) ** 2)
     if debug:
         print("Target Thetas:", target_thetas, "Current Thetas:", output_thetas)
         print("Reaching Error:", error)
