@@ -104,9 +104,9 @@ PopCode_norm_elbow.connect_all_to_all(1.0)
 #     StrD1_SNc[subset_key].connect_all_to_all(0.0)
 
 # Laterals
-# SNr_SNr = ann.Projection(pre=SNr, post=SNr, target='exc', synapse=ReversedSynapse)
-# wSNr_SNr = laterals_layerwise(Dim=SNr.geometry, axis=0, weight=0.1)
-# SNr_SNr.connect_from_matrix(wSNr_SNr)
+SNr_SNr = ann.Projection(pre=SNr, post=SNr, target='exc', synapse=ReversedSynapse)
+wSNr_SNr = laterals_layerwise(Dim=SNr.geometry, axis=0, weight=0.1)
+SNr_SNr.connect_from_matrix(wSNr_SNr)
 
 # M1_M1 = ann.Projection(pre=M1, post=M1, target='inh')
 # wM1_M1 = laterals_layerwise(Dim=M1.geometry, axis=0, weight=0.0)

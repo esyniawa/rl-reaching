@@ -108,14 +108,23 @@ PostDeltaRule = ann.Synapse(
     """,
     equations="""
         # dopamine modulation of learning rate
-        dopa_signal = post.sum(dopa) - baseline_dopa : min = 0.0
+        dopa_signal = post.sum(dopa) - baseline_dopa
         
         # Delta rule: delta w = lr * error * input
         error = post.feedback - post.r
-        delta_ltp = if (dopa_signal > 0.0): learning_rate * dopa_signal * error * pre.r else: 0.0
-        delta_ltd = if (dopa_signal < 0.0): decay_rate * dopa_signal * w else: 0.0
         
-        tau*dw/dt = delta_ltp + delta_ltd : min = 0.0
+        delta_ltp = if (dopa_signal > 0.0): 
+            learning_rate * dopa_signal * error * pre.r 
+        else: 
+            0.0
+        
+        # LTD/decay when dopamine below baseline
+        delta_ltd = if (dopa_signal < 0.0): 
+            -decay_rate * abs(dopa_signal) * w 
+        else: 
+            0.0
+        
+        tau*dw/dt = delta_ltp + delta_ltd
     """
 )
 
@@ -123,10 +132,20 @@ DAPrediction = ann.Synapse(
     parameters="""
         tau = 250.0 : projection
         threshold = 0.1 : projection
-   """,
-   equations="""
-       aux = if (post.mp>0): 1.0 else: 3.0
-       delta = aux*pos(post.r - baseline_dopa)*pos(pre.r - mean(pre.r) - threshold)
-       tau*dw/dt = delta : min = 0.0
-   """
+        learning_rate = 1.0 : projection
+        decay_rate = 0.01 : projection
+    """,
+    equations="""
+        # Reward prediction error
+        prediction_error = post.r - baseline_dopa
+
+        # Learning when there's unexpected dopamine
+        potentiation = pos(prediction_error) * pos(pre.r - mean(pre.r) - threshold)
+
+        # Decay when prediction doesn't match reality
+        depression = -decay_rate * w * pos(-prediction_error)
+
+        # Update rule
+        tau*dw/dt = learning_rate * (potentiation + depression) : min = -1.0, max = 1.0
+    """
 )

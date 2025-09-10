@@ -178,7 +178,7 @@ def test_reach(init_angle: np.ndarray,
                show_plot: bool = False,
                scale_pm: float = 1.0,
                scale_s1: float = 1.0,
-               num_random_points: int = 100) -> None:
+               num_random_points: int = 100) -> dict[str, list[float]]:
     # look for possible errors
     if pop_monitor is None and animate_populations is True:
         raise ValueError('Monitor populations must be specified if animate populations is True')
@@ -230,7 +230,7 @@ def test_reach(init_angle: np.ndarray,
         test_infos['sim_time'].append(sim_time)
         test_infos['error'].append(
             np.linalg.norm(
-                point - PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=out, radians=False)[:, -1]))
+                point - PlanarArms.forward_kinematics(arm=parameters['moving_arm'], thetas=out, radians=False, check_limits=False)[:, -1]))
 
     # saving data
     if not path.exists('results/' + 'test_' + save_path):
@@ -270,6 +270,8 @@ def test_reach(init_angle: np.ndarray,
                                         plot_types=pop_plot_types,
                                         folder='results/' + 'test_' + save_path,
                                         save_name=f'results/test_{save_path}pops_reaching.gif')
+
+    return test_infos
 
 
 def test_perturb(init_angle: np.ndarray,
