@@ -61,7 +61,7 @@ def update_reaching_space(parameters: dict,
 def objective(trial: optuna.Trial,
               study_name: str,
               feedback: bool,
-              n_training_trials: int = 8_000,
+              n_training_trials: int = 16_000,
               n_test_trials: int = 250,
               reward_time: int = 150,
               reach_time: int = 150,
@@ -185,7 +185,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # smaller peripersonal reaching space for hyperparameter optimization
-    parameters = update_reaching_space(parameters, x_bounds=(-150, 100), y_bounds=(50, 250))
+    # parameters = update_reaching_space(parameters, x_bounds=(-150, 100), y_bounds=(50, 250))
+    # reimport
+    # from network.model import *
+    # from experiments import training, test_reach
 
     study_name = args.study_name + f'_sim_{args.sim_id}'
 
