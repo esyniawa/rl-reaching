@@ -193,4 +193,4 @@ if __name__ == '__main__':
         os.makedirs(compile_folder)
     ann.compile(directory=compile_folder, clean=True)
 
-    study = run_optimization(n_hyper_trials=args.n_trials, study_name=study_name)
+    study = run_optimization(n_hyper_trials=args.n_trials, study_name=study_name, feedback=args.feedback)
