@@ -76,13 +76,13 @@ SNrNeuron = ann.Neuron(
 DopamineNeuron = ann.Neuron(
     parameters="""
         tau = 20.0 : population
-        firing = 0 : population, bool
+        firing = 0. : population
         factor_inh = 10.0 : population
         rate = 0.0
     """,
     equations="""
         s_inh = sum(inh)
-        aux = firing * pos(rate - s_inh) + (1-firing)*baseline_dopa  
+        aux = firing * pos(rate - s_inh) + (1.0-firing)*baseline_dopa  
         tau*dmp/dt + mp =  aux
         r = mp : min = 0.0
     """
@@ -103,8 +103,8 @@ ReversedSynapse = ann.Synapse(
 PostDeltaRule = ann.Synapse(
     parameters="""
         tau = 100.0 : projection
-        learning_rate = 1.5 : projection
-        decay_rate = 1.0 : projection
+        learning_rate = 2.0 : projection
+        decay_rate = 0.1 : projection
     """,
     equations="""
         # dopamine modulation of learning rate
@@ -112,17 +112,10 @@ PostDeltaRule = ann.Synapse(
         
         # Delta rule: delta w = lr * error * input
         error = post.feedback - post.r
-        
-        delta_ltp = if (dopa_signal > 0.0): 
-            learning_rate * dopa_signal * error * pre.r 
-        else: 
-            0.0
+        delta_ltp = learning_rate * pos(dopa_signal) * error * pre.r 
         
         # LTD/decay when dopamine below baseline
-        delta_ltd = if (dopa_signal < 0.0): 
-            -decay_rate * abs(dopa_signal) * w 
-        else: 
-            0.0
+        delta_ltd = -decay_rate * w * pos(-dopa_signal) * pre.r
         
         tau*dw/dt = delta_ltp + delta_ltd
     """
@@ -132,20 +125,19 @@ DAPrediction = ann.Synapse(
     parameters="""
         tau = 250.0 : projection
         threshold = 0.1 : projection
-        learning_rate = 1.0 : projection
-        decay_rate = 0.01 : projection
+        decay_rate = 0.1 : projection
     """,
     equations="""
         # Reward prediction error
         prediction_error = post.r - baseline_dopa
 
         # Learning when there's unexpected dopamine
-        potentiation = pos(prediction_error) * pos(pre.r - mean(pre.r) - threshold)
+        delta_ltp = pos(prediction_error) * pos(pre.r - mean(pre.r) - threshold)
 
         # Decay when prediction doesn't match reality
-        depression = -decay_rate * w * pos(-prediction_error)
+        delta_ltd = -decay_rate * w * pos(-prediction_error)
 
         # Update rule
-        tau*dw/dt = learning_rate * (potentiation + depression) : min = -1.0, max = 1.0
+        tau*dw/dt = delta_ltp + delta_ltd
     """
 )

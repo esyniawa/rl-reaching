@@ -95,13 +95,13 @@ PopCode_norm_shoulder.connect_all_to_all(1.0)
 PopCode_norm_elbow = ann.Projection(pre=M1[:, 1], post=Output_Pop_Elbow[0], target='norm')
 PopCode_norm_elbow.connect_all_to_all(1.0)
 
-# Reward prediction
-# StrD1_SNc = {}
-# for i, subset_key in enumerate(parameters['subsets_str']):
-#     interval = parameters['subsets_str'][subset_key]
-#     StrD1_SNc[subset_key] = ann.Projection(pre=StrD1[:, :, interval[0]:interval[1]], post=SNc[i],
-#                                            target='inh', name=f'D1_SNc_{subset_key}', synapse=DAPrediction)
-#     StrD1_SNc[subset_key].connect_all_to_all(0.0)
+# Reward prediction (inhibits DA bursts)
+StrD1_SNc = {}
+for i, subset_key in enumerate(parameters['subsets_str']):
+    interval = parameters['subsets_str'][subset_key]
+    StrD1_SNc[subset_key] = ann.Projection(pre=StrD1[:, :, interval[0]:interval[1]], post=SNc[i],
+                                           target='inh', name=f'D1_SNc_{subset_key}', synapse=DAPrediction)
+    StrD1_SNc[subset_key].connect_all_to_all(0.0)
 
 # Laterals
 SNr_SNr = ann.Projection(pre=SNr, post=SNr, target='exc', synapse=ReversedSynapse)

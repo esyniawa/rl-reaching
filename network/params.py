@@ -8,7 +8,7 @@ parameters = {}
 parameters['moving_arm'] = 'right'
 
 # for motor space
-parameters['dim_motor'] = (21, 2)
+parameters['dim_motor'] = (25, 2)
 parameters['rpe_motor'] = 30  # in [mm]
 
 parameters['theta_limit_low'], parameters['theta_limit_high'] = -10, 170
@@ -50,7 +50,7 @@ parameters['dim_pm'] = parameters['state_pm'].shape[:-1]
 
 # model definitions
 parameters['sig_s1'] = 25.  # in [°]
-parameters['sig_pm'] = 125.  # in [mm]
+parameters['sig_pm'] = 150.  # in [mm]
 parameters['sig_m1'] = 20.  # in [°]
 
 parameters['dim_bg'] = parameters['dim_motor']
