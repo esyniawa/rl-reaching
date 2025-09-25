@@ -15,7 +15,7 @@ if __name__ == '__main__':
                             help='Testing condition for reaching')
     exp_parser.add_argument('--con_monitor', type=bool, default=False)
     exp_parser.add_argument('--debug_mode', type=bool, default=False)
-    exp_parser.add_argument('--reaching_time', type=float, default=200.0)
+    exp_parser.add_argument('--reaching_time', type=float, default=150.0)
     exp_parser.add_argument('--clean', type=bool, default=False, help='Clean ANNarchy compilation of the model')
     exp_parser.add_argument('--animate_arms', type=bool, default=False)
     exp_args = exp_parser.parse_args()

@@ -123,8 +123,8 @@ PostDeltaRule = ann.Synapse(
 
 DAPrediction = ann.Synapse(
     parameters="""
-        tau = 250.0 : projection
-        threshold = 0.1 : projection
+        tau = 150.0 : projection
+        threshold = 0.05 : projection
         decay_rate = 0.1 : projection
     """,
     equations="""

@@ -105,7 +105,7 @@ for i, subset_key in enumerate(parameters['subsets_str']):
 
 # Laterals
 SNr_SNr = ann.Projection(pre=SNr, post=SNr, target='exc', synapse=ReversedSynapse)
-wSNr_SNr = laterals_layerwise(Dim=SNr.geometry, axis=0, weight=0.1)
+wSNr_SNr = laterals_layerwise(Dim=SNr.geometry, axis=0, weight=0.2)
 SNr_SNr.connect_from_matrix(wSNr_SNr)
 
 # M1_M1 = ann.Projection(pre=M1, post=M1, target='inh')

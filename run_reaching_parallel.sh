@@ -27,7 +27,7 @@ for durchgang in $(seq $durchgaenge); do
 
     for i in $(seq $parallel); do
         let y=$i+$parallel*$((durchgang - 1))
-        python run_reaching.py --id $y --test_pert 1 --test_reach_condition 'random' &
+        python run_reaching.py --id $y --test_pert 0 --test_reach_condition 'random' &
     done
     wait
 
